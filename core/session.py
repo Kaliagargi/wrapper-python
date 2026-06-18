@@ -2,41 +2,56 @@
 
 import uuid
 from datetime import datetime, timedelta
-from typing import Optional
 import pandas as pd
 
-# ── In-memory store ───────────────────────────────────────
+SESSION_EXPIRY_HOURS = 8
 
 _sessions: dict = {}
-SESSION_EXPIRY_HOURS = 8  # Session lives for 8 hours
 
 
-# ── Session Model ─────────────────────────────────────────
+# ─────────────────────────────────────────────
+# SESSION MODEL
+# ─────────────────────────────────────────────
 
 class Session:
-    def __init__(self, file_path: str, df: pd.DataFrame):
-        self.session_id = str(uuid.uuid4())
-        self.file_path = file_path        # Path to uploaded Excel file
-        self.df = df                      # Parsed clean DataFrame
-        self.created_at = datetime.now()
-        self.expires_at = datetime.now() + timedelta(hours=SESSION_EXPIRY_HOURS)
+    def __init__(
+        self,
+        file_path:      str,
+        project_layout: list,
+        records:        list,
+        sw_agg:         dict,
+    ):
+        self.session_id     = str(uuid.uuid4())
+        self.file_path      = file_path       # original uploaded file path
+        self.project_layout = project_layout  # list of project dicts
+        self.records        = records         # all dept-level rows
+        self.sw_agg         = sw_agg          # grouped by software
+        self.created_at     = datetime.now()
+        self.expires_at     = datetime.now() + timedelta(hours=SESSION_EXPIRY_HOURS)
 
     def is_expired(self) -> bool:
         return datetime.now() > self.expires_at
 
 
-# ── Session Operations ────────────────────────────────────
+# ─────────────────────────────────────────────
+# SESSION OPERATIONS
+# ─────────────────────────────────────────────
 
-def create_session(file_path: str, df: pd.DataFrame) -> str:
-    """Create a new session, store it, return session_id"""
-    session = Session(file_path, df)
+def create_session(
+    file_path:      str,
+    project_layout: list,
+    records:        list,
+    sw_agg:         dict,
+) -> str:
+    """Create new session, return session_id"""
+    session = Session(file_path, project_layout, records, sw_agg)
     _sessions[session.session_id] = session
     return session.session_id
 
 
 def get_session(session_id: str) -> Session:
-    """Fetch session by ID. Raises error if missing or expired."""
-    from core.errors import SessionNotFoundError  # avoid circular import
+    """Fetch session — raises error if missing or expired"""
+    from core.errors import SessionNotFoundError
 
     session = _sessions.get(session_id)
 
@@ -51,12 +66,10 @@ def get_session(session_id: str) -> Session:
 
 
 def delete_session(session_id: str) -> None:
-    """Remove session from store"""
     _sessions.pop(session_id, None)
 
 
 def cleanup_expired_sessions() -> int:
-    """Remove all expired sessions. Returns count of removed sessions."""
     expired = [
         sid for sid, s in _sessions.items()
         if s.is_expired()
@@ -64,7 +77,3 @@ def cleanup_expired_sessions() -> int:
     for sid in expired:
         del _sessions[sid]
     return len(expired)
-
-
-def get_active_session_count() -> int:
-    return len(_sessions)
