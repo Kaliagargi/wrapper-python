@@ -21,7 +21,7 @@ async def upload_file(file: UploadFile = File(...)):
     Returns session_id and summary of what was found.
     """
 
-    # Step 1 — validate file extension
+    # Step 1 — validate file extensionw
     if not file.filename.endswith(".xlsx"):
         raise HTTPException(
             status_code=400,

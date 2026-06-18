@@ -12,124 +12,114 @@ from services.table_builder import (
 
 router = APIRouter(prefix="/tables", tags=["Tables"])
 
-
-# ─────────────────────────────────────────────
-# SOFTWARE LIST
-# ─────────────────────────────────────────────
-
-@router.get("/software-list")
-def software_list(session_id: str = Query(...)):
-    """
-    Returns software where lease_lic > 0.
-    Use this to populate dropdowns in your UI.
-    """
-    session  = get_session(session_id)
-    software = get_software_list(session.sw_agg)
-
-    return {
-        "success": True,
-        "count":   len(software),
-        "data":    software,
-    }
-
-
-# ─────────────────────────────────────────────
-# TABLE 1 — Licence Summary
-# ─────────────────────────────────────────────
+# routers/tables.py
+from services.excel_writer import save_sheet
 
 @router.get("/table1")
-def table1(session_id: str = Query(...)):
-    """
-    All software with Total Lic and Lease Lic.
-    No software filter needed.
-    """
-    session = get_session(session_id)
-    data    = build_table1(session.sw_agg)
+def table1(
+    session_id: str   = Query(...),
+    software:   str   = Query(...),
+    annual:     float = Query(None),
+):
+    session  = get_session(session_id)
+    sw_list  = [s.strip() for s in software.split(",")]
+    annual_v = annual if annual is not None else session.user_inputs["annual"]
 
-    return {
-        "success": True,
-        "count":   len(data),
-        "data":    data,
-    }
+    data = build_table1(
+        sw_agg        = session.sw_agg,
+        software_list = sw_list,
+        annual        = annual_v,
+    )
 
+    # Save to Excel immediately
+    save_sheet(
+        file_path  = session.file_path,
+        sheet_name = "Licence Summary",
+        data       = data,
+    )
 
-# ─────────────────────────────────────────────
-# TABLE 2 — Allocated
-# ─────────────────────────────────────────────
+    return {"success": True, "count": len(data), "data": data}
+
 
 @router.get("/table2")
 def table2(
-    session_id: str = Query(...),
-    software:   str = Query(..., description="Software name to filter by"),
+    session_id: str   = Query(...),
+    software:   str   = Query(...),
+    advent:     float = Query(None),
+    onshore:    float = Query(None),
 ):
-    """
-    Allocated licences per dept per project for selected software.
-    """
-    session = get_session(session_id)
-    data    = build_table2(
-        session.records,
-        session.sw_agg,
-        software,
-        session.project_layout,
+    session   = get_session(session_id)
+    sw_list   = [s.strip() for s in software.split(",")]
+    advent_v  = advent  if advent  is not None else session.user_inputs["advent"]
+    onshore_v = onshore if onshore is not None else session.user_inputs["onshore"]
+
+    data = build_table2(
+        records       = session.records,
+        sw_agg        = session.sw_agg,
+        software_list = sw_list,
+        advent        = advent_v,
+        onshore       = onshore_v,
     )
 
-    return {
-        "success":  True,
-        "software": software,
-        "count":    len(data),
-        "data":     data,
-    }
+    save_sheet(
+        file_path  = session.file_path,
+        sheet_name = "Allocated",
+        data       = data,
+    )
 
+    return {"success": True, "data": data}
 
-# ─────────────────────────────────────────────
-# TABLE 3 — Required
-# ─────────────────────────────────────────────
 
 @router.get("/table3")
 def table3(
-    session_id: str = Query(...),
-    software:   str = Query(..., description="Software name to filter by"),
+    session_id: str   = Query(...),
+    software:   str   = Query(...),
+    annual:     float = Query(None),
+    advent:     float = Query(None),
+    onshore:    float = Query(None),
 ):
-    """
-    Required licences (deficit) for selected software.
-    """
-    session = get_session(session_id)
-    data    = build_table3(
-        session.records,
-        session.sw_agg,
-        software,
+    session   = get_session(session_id)
+    sw_list   = [s.strip() for s in software.split(",")]
+    annual_v  = annual  if annual  is not None else session.user_inputs["annual"]
+    advent_v  = advent  if advent  is not None else session.user_inputs["advent"]
+    onshore_v = onshore if onshore is not None else session.user_inputs["onshore"]
+
+    data = build_table3(
+        records       = session.records,
+        sw_agg        = session.sw_agg,
+        software_list = sw_list,
+        annual        = annual_v,
+        advent        = advent_v,
+        onshore       = onshore_v,
     )
 
-    return {
-        "success":  True,
-        "software": software,
-        "count":    len(data),
-        "data":     data,
-    }
+    save_sheet(
+        file_path  = session.file_path,
+        sheet_name = "Required",
+        data       = data,
+    )
 
+    return {"success": True, "data": data}
 
-# ─────────────────────────────────────────────
-# TABLE 4 — ISL
-# ─────────────────────────────────────────────
 
 @router.get("/table4")
 def table4(
     session_id: str = Query(...),
-    software:   str = Query(..., description="Software name to filter by"),
+    software:   str = Query(...),
 ):
-    """
-    In-stock licences (own + lease) for selected software.
-    """
     session = get_session(session_id)
-    data    = build_table4(
-        session.records,
-        session.sw_agg,
-        software,
+    sw_list = [s.strip() for s in software.split(",")]
+
+    data = build_table4(
+        records       = session.records,
+        sw_agg        = session.sw_agg,
+        software_list = sw_list,
     )
 
-    return {
-        "success":  True,
-        "software": software,
-        "count":    len(data),
-        "data":     data,
-    }
+    save_sheet(
+        file_path  = session.file_path,
+        sheet_name = "ISL",
+        data       = data,
+    )
+
+    return {"success": True, "data": data}

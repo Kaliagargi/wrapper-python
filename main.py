@@ -3,6 +3,9 @@ from fastapi import FastAPI
 from core.errors import register_error_handlers
 from core.session import cleanup_expired_sessions
 from routers import upload, tables
+from routers import download, keystore
+
+
 
 app = FastAPI(title="Licence Manager")
 
@@ -10,6 +13,7 @@ register_error_handlers(app)
 
 app.include_router(upload.router)
 app.include_router(tables.router)
+app.include_router(keystore.router)
 
 @app.on_event("startup")
 async def startup():
