@@ -1,0 +1,134 @@
+{% extends "base.html" %}
+{% block title %}Upload — Licence Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Upload Excel File</h2>
+    <p>Upload your monthly licence management Excel file to get started.</p>
+</div>
+
+<div class="card">
+    <div class="card-title"> Select File</div>
+    <div class="upload-zone" id="uploadZone">
+        <h3>Drag & drop your Excel file here</h3>
+        <p>or click to browse — .xlsx files only</p>
+        <input type="file" id="fileInput" accept=".xlsx"
+               style="display:none">
+    </div>
+    <div style="margin-top:16px; display:flex; gap:12px; align-items:center">
+        <button class="btn btn-yellow" onclick="document.getElementById('fileInput').click()">
+             Browse File
+        </button>
+        <button class="btn btn-primary" id="uploadBtn" onclick="uploadFile()" disabled>
+             Upload & Parse
+        </button>
+        <span id="fileName" style="font-size:13px; color:#757575"></span>
+    </div>
+</div>
+
+<div id="uploadResult" style="display:none">
+    <div class="card">
+        <div class="card-title"> File Parsed Successfully</div>
+        <div id="summaryContent"></div>
+        <div style="margin-top:20px">
+            <a href="/dashboard" class="btn btn-primary">
+                Go to Dashboard
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedFile = null;
+
+document.getElementById('fileInput').addEventListener('change', (e) => {
+    selectedFile = e.target.files[0];
+    if (selectedFile) {
+        document.getElementById('fileName').textContent = selectedFile.name;
+        document.getElementById('uploadBtn').disabled = false;
+    }
+});
+
+const zone = document.getElementById('uploadZone');
+zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.classList.add('dragover'); });
+zone.addEventListener('dragleave', () => zone.classList.remove('dragover'));
+zone.addEventListener('drop', (e) => {
+    e.preventDefault();
+    zone.classList.remove('dragover');
+    const file = e.dataTransfer.files[0];
+    if (file && file.name.endsWith('.xlsx')) {
+        selectedFile = file;
+        document.getElementById('fileName').textContent = file.name;
+        document.getElementById('uploadBtn').disabled = false;
+    } else {
+        toast('Only .xlsx files are supported', 'error');
+    }
+});
+
+async function uploadFile() {
+    if (!selectedFile) return;
+    showLoading('Parsing Excel file...');
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    const data = await apiFetch('/upload/', {
+        method: 'POST',
+        body:   formData,
+    });
+
+    hideLoading();
+
+    if (!data || !data.success) {
+        toast(data?.detail || 'Upload failed', 'error');
+        return;
+    }
+
+    // Save to sessionStorage
+    Session.set('session_id',   data.session_id);
+    Session.set('upload_data',  data);
+    Session.set('done_tables',  []);
+    Session.set('software',     []);
+    Session.set('inputs',       {annual:0, advent:0, onshore:0});
+
+    // Show summary
+    document.getElementById('uploadResult').style.display = 'block';
+    <!-- Replace the summaryContent div rendering in uploadFile() -->
+document.getElementById('summaryContent').innerHTML = `
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-value">${data.projects_found}</div>
+            <div class="stat-label">Projects</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${data.records_found}</div>
+            <div class="stat-label">Records</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${data.software_found}</div>
+            <div class="stat-label">Software</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-value">${data.locations?.length || 0}</div>
+            <div class="stat-label">Locations</div>
+        </div>
+    </div>
+    <div class="divider"></div>
+    <div class="form-label">Software Found</div>
+    <div class="chips">
+        ${data.software.map(s => `<span class="chip chip-blue">🖥️ ${s}</span>`).join('')}
+    </div>
+    <div style="margin-top:12px">
+        <div class="form-label">Projects</div>
+        <div class="chips">
+            ${data.projects.map(p => `<span class="chip">${p}</span>`).join('')}
+        </div>
+    </div>
+`;
+    updateNav();
+    toast('File uploaded and parsed successfully!', 'success');
+}
+</script>
+{% endblock %}

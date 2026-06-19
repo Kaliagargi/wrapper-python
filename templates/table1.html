@@ -1,0 +1,78 @@
+{% extends "base.html" %}
+{% block title %}Licence Summary{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2> Licence Summary</h2>
+    <p>Total, Own, Lease, Annual and Order licences per software.</p>
+</div>
+
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+        <div class="card-title" style="margin:0">Results</div>
+        <div style="display:flex; gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="toggleEdit(this)"
+                    data-editing="false"> Edit</button>
+            <button class="btn btn-primary btn-sm" onclick="buildTable()">
+                Build Table
+            </button>
+        </div>
+    </div>
+    <div id="tableContainer">
+        <div class="alert alert-info">
+            Click "Build Table" to generate the Licence Summary.
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let tableData = [];
+
+async function buildTable() {
+    const sid      = getSessionId();
+    const software = getSoftware();
+    const inputs   = getInputs();
+
+    if (!sid || software.length === 0) {
+        toast('Please upload a file and select software first', 'error');
+        return;
+    }
+
+    showLoading('Building Licence Summary...');
+
+    const params = new URLSearchParams({
+        session_id: sid,
+        software:   software.join(','),
+        annual:     inputs.annual,
+    });
+
+    const data = await apiFetch(`/tables/table1?${params}`);
+    hideLoading();
+
+    if (!data?.success) {
+        toast('Failed to build table', 'error');
+        return;
+    }
+
+    tableData = data.data;
+
+    const headers = ['Developer', 'Software', 'Total Lic', 'Own Lic',
+                     'Lease Lic', 'Annual', 'Order'];
+    const rows = tableData.map(r => ({
+        developer: r.developer,
+        software:  r.software,
+        total_lic: r.total_lic,
+        own_lic:   r.own_lic,
+        lease_lic: r.lease_lic,
+        annual:    r.annual,
+        order:     r.order,
+    }));
+
+    renderTable('tableContainer', headers, rows, true);
+    markDone('table1');
+    toast('Licence Summary built!', 'success');
+}
+</script>
+{% endblock %}

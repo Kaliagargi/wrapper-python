@@ -1,0 +1,79 @@
+{% extends "base.html" %}
+{% block title %}Required{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2> Required Licences</h2>
+    <p>Valdel, PP, CEC, VEC breakdown per software.</p>
+</div>
+
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+        <div class="card-title" style="margin:0">Results</div>
+        <div style="display:flex; gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="toggleEdit(this)"
+                    data-editing="false">Edit</button>
+            <button class="btn btn-primary btn-sm" onclick="buildTable()">
+                Build Table
+            </button>
+        </div>
+    </div>
+    <div id="tableContainer">
+        <div class="alert alert-info">
+            Click "Build Table" to generate Required Licences.
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function buildTable() {
+    const sid      = getSessionId();
+    const software = getSoftware();
+    const inputs   = getInputs();
+
+    if (!sid || software.length === 0) {
+        toast('Please upload a file and select software first', 'error');
+        return;
+    }
+
+    showLoading('Building Required table...');
+
+    const params = new URLSearchParams({
+        session_id: sid,
+        software:   software.join(','),
+        annual:     inputs.annual,
+        advent:     inputs.advent,
+        onshore:    inputs.onshore,
+    });
+
+    const data = await apiFetch(`/tables/table3?${params}`);
+    hideLoading();
+
+    if (!data?.success) {
+        toast('Failed to build table', 'error');
+        return;
+    }
+
+    const rows = [];
+    Object.entries(data.data).forEach(([sw, swData]) => {
+        swData.rows.forEach(r => {
+            rows.push({
+                software:  sw,
+                developer: swData.developer,
+                category:  r.label,
+                value:     r.value,
+            });
+        });
+    });
+
+    renderTable('tableContainer',
+        ['Software', 'Developer', 'Category', 'Value'],
+        rows, true
+    );
+    markDone('table3');
+    toast('Required table built!', 'success');
+}
+</script>
+{% endblock %}

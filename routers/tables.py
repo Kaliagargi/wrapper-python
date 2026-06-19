@@ -14,6 +14,32 @@ router = APIRouter(prefix="/tables", tags=["Tables"])
 
 # routers/tables.py
 from services.excel_writer import save_sheet
+from services.table_builder import (
+    get_developer_list,
+    get_software_list,
+    get_software_by_developer,
+    build_table1,
+    build_table2,
+    build_table3,
+    build_table4,
+)
+
+@router.get("/developer-list")
+def developer_list(session_id: str = Query(...)):
+    session    = get_session(session_id)
+    developers = get_developer_list(session.sw_agg)
+    return {"success": True, "count": len(developers), "data": developers}
+
+
+@router.get("/software-by-developer")
+def software_by_developer(
+    session_id:  str = Query(...),
+    developers:  str = Query(...),
+):
+    session  = get_session(session_id)
+    dev_list = [d.strip() for d in developers.split(",")]
+    data     = get_software_by_developer(session.sw_agg, dev_list)
+    return {"success": True, "count": len(data), "data": data}
 
 @router.get("/table1")
 def table1(
@@ -50,8 +76,9 @@ def table2(
 ):
     session   = get_session(session_id)
     sw_list   = [s.strip() for s in software.split(",")]
-    advent_v  = advent  if advent  is not None else session.user_inputs["advent"]
-    onshore_v = onshore if onshore is not None else session.user_inputs["onshore"]
+    advent_v  = advent  or 0
+    onshore_v = onshore or 0
+    
 
     data = build_table2(
         records       = session.records,
@@ -80,9 +107,9 @@ def table3(
 ):
     session   = get_session(session_id)
     sw_list   = [s.strip() for s in software.split(",")]
-    annual_v  = annual  if annual  is not None else session.user_inputs["annual"]
-    advent_v  = advent  if advent  is not None else session.user_inputs["advent"]
-    onshore_v = onshore if onshore is not None else session.user_inputs["onshore"]
+    annual_v  = annual  or 0
+    advent_v  = advent  or 0
+    onshore_v = onshore or 0
 
     data = build_table3(
         records       = session.records,

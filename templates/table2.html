@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+{% block title %}Allocated{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Allocated Licences</h2>
+    <p>LTC breakdown by category per software.</p>
+</div>
+
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+        <div class="card-title" style="margin:0">Results</div>
+        <div style="display:flex; gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="toggleEdit(this)"
+                    data-editing="false">Edit</button>
+            <button class="btn btn-primary btn-sm" onclick="buildTable()">
+                Build Table
+            </button>
+        </div>
+    </div>
+    <div id="tableContainer">
+        <div class="alert alert-info">
+            Click "Build Table" to generate Allocated Licences.
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let tableData = [];
+
+async function buildTable() {
+    const sid      = getSessionId();
+    const software = getSoftware();
+    const inputs   = getInputs();
+
+    if (!sid || software.length === 0) {
+        toast('Please upload a file and select software first', 'error');
+        return;
+    }
+
+    showLoading('Building Allocated table...');
+
+    const params = new URLSearchParams({
+        session_id: sid,
+        software:   software.join(','),
+        advent:     inputs.advent,
+        onshore:    inputs.onshore,
+    });
+
+    const data = await apiFetch(`/tables/table2?${params}`);
+    hideLoading();
+
+    if (!data?.success) {
+        toast('Failed to build table', 'error');
+        return;
+    }
+
+    // Flatten dict to rows for rendering
+    const rows = [];
+    Object.entries(data.data).forEach(([sw, swData]) => {
+        swData.rows.forEach(r => {
+            rows.push({
+                software:    sw,
+                developer:   swData.developer,
+                category:    r.label,
+                description: r.description || '',
+                value:       r.value,
+            });
+        });
+    });
+
+    tableData = rows;
+    renderTable('tableContainer',
+        ['Software', 'Developer', 'Category', 'Description', 'Value'],
+        rows, true
+    );
+    markDone('table2');
+    toast('Allocated table built!', 'success');
+}
+</script>
+{% endblock %}

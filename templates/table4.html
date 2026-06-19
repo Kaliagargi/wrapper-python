@@ -1,0 +1,77 @@
+{% extends "base.html" %}
+{% block title %}ISL{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2> ISL — In Stock Licences</h2>
+    <p>LTM and Share breakdown per dept per software.</p>
+</div>
+
+<div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+        <div class="card-title" style="margin:0">Results</div>
+        <div style="display:flex; gap:8px">
+            <button class="btn btn-outline btn-sm" onclick="toggleEdit(this)"
+                    data-editing="false">Edit</button>
+            <button class="btn btn-primary btn-sm" onclick="buildTable()">
+                 Build Table
+            </button>
+        </div>
+    </div>
+    <div id="tableContainer">
+        <div class="alert alert-info">
+            Click "Build Table" to generate ISL.
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+async function buildTable() {
+    const sid      = getSessionId();
+    const software = getSoftware();
+
+    if (!sid || software.length === 0) {
+        toast('Please upload a file and select software first', 'error');
+        return;
+    }
+
+    showLoading('Building ISL table...');
+
+    const params = new URLSearchParams({
+        session_id: sid,
+        software:   software.join(','),
+    });
+
+    const data = await apiFetch(`/tables/table4?${params}`);
+    hideLoading();
+
+    if (!data?.success) {
+        toast('Failed to build table', 'error');
+        return;
+    }
+
+    const rows = [];
+    Object.entries(data.data).forEach(([sw, swData]) => {
+        swData.rows.forEach(r => {
+            rows.push({
+                software:  sw,
+                developer: swData.developer,
+                dept:      r.dept,
+                ltm:       r.ltm,
+                share:     r.share,
+                total:     r.total,
+            });
+        });
+    });
+
+    renderTable('tableContainer',
+        ['Software', 'Developer', 'Dept', 'LTM', 'Share', 'Total'],
+        rows, true
+    );
+    markDone('table4');
+    toast('ISL table built!', 'success');
+}
+</script>
+{% endblock %}

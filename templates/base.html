@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Licence Manager{% endblock %}</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<aside class="sidebar">
+    <div class="sidebar-header">
+        <div class="sidebar-logo">
+            <h1>Licence Manager</h1>
+        </div>
+        <p>Internal Tool v1.0</p>
+    </div>
+    <nav class="sidebar-nav">
+        <div class="nav-section">Setup</div>
+        <a href="/" class="nav-item">
+            <span class="icon"></span> Upload File
+        </a>
+        <a href="/dashboard" class="nav-item" data-require="session">
+            <span class="icon"></span> Dashboard
+        </a>
+
+        <div class="nav-section">Tables</div>
+        <a href="/table1" class="nav-item locked" data-require="software">
+            <span class="icon"></span> Licence Summary
+            <span class="nav-badge" data-table="table1">—</span>
+        </a>
+        <a href="/table2" class="nav-item locked" data-require="software">
+            <span class="icon"></span> Allocated
+            <span class="nav-badge" data-table="table2">—</span>
+        </a>
+        <a href="/table3" class="nav-item locked" data-require="software">
+            <span class="icon"></span> Required
+            <span class="nav-badge" data-table="table3">—</span>
+        </a>
+        <a href="/table4" class="nav-item locked" data-require="software">
+            <span class="icon"></span> ISL
+            <span class="nav-badge" data-table="table4">—</span>
+        </a>
+
+        <div class="nav-section">More</div>
+        <a href="/keystore-page" class="nav-item locked" data-require="software">
+            <span class="icon"></span> Keystore
+        </a>
+        <a href="/download-page" class="nav-item locked" data-require="session">
+            <span class="icon"></span> Download
+        </a>
+    </nav>
+</aside>
+
+<!-- Main -->
+<main class="main">
+    {% block content %}{% endblock %}
+</main>
+
+<!-- Toast -->
+<div id="toast" class="alert" style="display:none"></div>
+
+<!-- Loading -->
+<div id="loading" class="loading-overlay">
+    <div class="spinner"></div>
+    <span>Loading...</span>
+</div>
+
+<script src="/static/app.js"></script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

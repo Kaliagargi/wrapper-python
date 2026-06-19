@@ -1,0 +1,155 @@
+{% extends "base.html" %}
+{% block title %}Download{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Download Report</h2>
+    <p>Download the complete Excel report with all tables.</p>
+</div>
+
+<!-- Status -->
+<div class="card">
+    <div class="card-title">Sheets Ready</div>
+    <div id="sheetStatus" class="chips">
+        <span class="chip" id="status_table1">Licence Summary</span>
+        <span class="chip" id="status_table2">Allocated</span>
+        <span class="chip" id="status_table3"> Required</span>
+        <span class="chip" id="status_table4">ISL</span>
+        <span class="chip" id="status_keystore"> Keystore</span>
+    </div>
+</div>
+
+<!-- Download Options -->
+<div class="card">
+    <div class="card-title"> Download Options</div>
+    <div class="form-row">
+        <div class="form-group">
+            <label class="form-label">Annual (override)</label>
+            <input type="number" class="form-control" id="dlAnnual" placeholder="0">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Advent (override)</label>
+            <input type="number" class="form-control" id="dlAdvent" placeholder="0">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Onshore (override)</label>
+            <input type="number" class="form-control" id="dlOnshore" placeholder="0">
+        </div>
+    </div>
+    <div style="display:flex; gap:12px; margin-top:8px">
+        <button class="btn btn-primary" onclick="downloadReport()">
+            Download Excel Report
+        </button>
+        <button class="btn btn-outline" onclick="buildAll()">
+            Rebuild All Tables
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.addEventListener('DOMContentLoaded', () => {
+    const inputs = getInputs();
+    document.getElementById('dlAnnual').value  = inputs.annual;
+    document.getElementById('dlAdvent').value  = inputs.advent;
+    document.getElementById('dlOnshore').value = inputs.onshore;
+
+    // Show which tables are done
+    const done = Session.get('done_tables') || [];
+    ['table1','table2','table3','table4'].forEach(t => {
+        const el = document.getElementById(`status_${t}`);
+        if (el && done.includes(t)) {
+            el.style.background = '#E8F5E9';
+            el.style.color      = '#2E7D32';
+            el.style.borderColor = '#A5D6A7';
+            el.textContent =  el.textContent;
+        }
+    });
+});
+
+async function downloadReport() {
+    const sid      = getSessionId();
+    const software = getSoftware();
+
+    if (!sid || software.length === 0) {
+        toast('Please upload a file and select software first', 'error');
+        return;
+    }
+
+    const annual          = parseFloat(document.getElementById('dlAnnual').value)  || 0;
+    const advent          = parseFloat(document.getElementById('dlAdvent').value)  || 0;
+    const onshore         = parseFloat(document.getElementById('dlOnshore').value) || 0;
+    const keystoreValues  = Session.get('keystore_values') || {};
+
+    showLoading('Generating Excel report...');
+
+    try {
+        const response = await fetch('/download/', {
+            method:  'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body:    JSON.stringify({
+                session_id:       sid,
+                software:         software,
+                annual:           annual,
+                advent:           advent,
+                onshore:          onshore,
+                keystore_values:  keystoreValues,
+            }),
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            toast(err.detail || 'Download failed', 'error');
+            hideLoading();
+            return;
+        }
+
+        // Convert response to downloadable file
+        const blob     = await response.blob();
+        const url      = window.URL.createObjectURL(blob);
+        const a        = document.createElement('a');
+        a.href         = url;
+        a.download     = 'licence_report.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+
+        hideLoading();
+        toast('Download started!', 'success');
+
+    } catch(e) {
+        hideLoading();
+        toast('Download failed: ' + e.message, 'error');
+    }
+}
+
+async function buildAll() {
+    const sid      = getSessionId();
+    const software = getSoftware();
+    const inputs   = getInputs();
+
+    if (!sid || software.length === 0) {
+        toast('Please select software first', 'error');
+        return;
+    }
+
+    showLoading('Building all tables...');
+
+    const base = `session_id=${sid}&software=${encodeURIComponent(software.join(','))}` +
+                 `&annual=${inputs.annual}&advent=${inputs.advent}&onshore=${inputs.onshore}`;
+
+    await apiFetch(`/tables/table1?${base}&annual=${inputs.annual}`);
+    await apiFetch(`/tables/table2?${base}`);
+    await apiFetch(`/tables/table3?${base}`);
+    await apiFetch(`/tables/table4?session_id=${sid}&software=${encodeURIComponent(software.join(','))}`);
+
+    hideLoading();
+    Session.set('done_tables', ['table1','table2','table3','table4']);
+    updateNav();
+    toast('All tables built!', 'success');
+    location.reload();
+}
+</script>
+{% endblock %}

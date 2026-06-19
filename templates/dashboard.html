@@ -1,0 +1,196 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — Licence Manager{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h2>Dashboard</h2>
+    <p>Select developers, software and set input values.</p>
+</div>
+
+<div style="display:grid; grid-template-columns:1fr 1fr; gap:20px">
+
+    <!-- Developer Select -->
+    <div class="card">
+        <div class="card-title"> Select Developers</div>
+        <div id="developerList" class="multi-select">
+            <div style="padding:12px; color:#999; font-size:13px">Loading...</div>
+        </div>
+    </div>
+
+    <!-- Software Select -->
+    <div class="card">
+        <div class="card-title"> Select Software</div>
+        <div id="softwareList" class="multi-select">
+            <div style="padding:12px; color:#999; font-size:13px">
+                Select developers first...
+            </div>
+        </div>
+    </div>
+
+</div>
+
+<!-- Inputs -->
+<div class="card">
+    <div class="card-title"> Input Values</div>
+    <p style="font-size:13px; color:#757575; margin-bottom:16px">
+        These values are used across all tables. They are saved in your browser session.
+    </p>
+    <div class="form-row">
+        <div class="form-group">
+            <label class="form-label">Annual Licences</label>
+            <input type="number" class="form-control" id="inputAnnual"
+                   placeholder="0" min="0">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Advent</label>
+            <input type="number" class="form-control" id="inputAdvent"
+                   placeholder="0" min="0">
+        </div>
+        <div class="form-group">
+            <label class="form-label">Onshore</label>
+            <input type="number" class="form-control" id="inputOnshore"
+                   placeholder="0" min="0">
+        </div>
+    </div>
+    <button class="btn btn-yellow" onclick="saveInputs()">
+        Save Inputs
+    </button>
+</div>
+
+<!-- Selected Summary -->
+<div class="card" id="selectionSummary" style="display:none">
+    <div class="card-title">Current Selection</div>
+    <div id="summaryChips"></div>
+    <div style="margin-top:16px">
+        <a href="/table1" class="btn btn-primary">Go to Tables</a>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+let selectedDevelopers = [];
+let selectedSoftware   = [];
+
+async function loadDevelopers() {
+    const sid  = getSessionId();
+    if (!sid) { window.location.href = '/'; return; }
+
+    const data = await apiFetch(`/tables/developer-list?session_id=${sid}`);
+    if (!data?.success) return;
+
+    const container = document.getElementById('developerList');
+    container.innerHTML = data.data.map(dev => `
+        <div class="multi-select-item" onclick="toggleDeveloper('${dev}', this)">
+            <input type="checkbox" id="dev_${dev}"> ${dev}
+        </div>
+    `).join('');
+}
+
+async function toggleDeveloper(dev, el) {
+    el.classList.toggle('selected');
+    el.querySelector('input').checked = el.classList.contains('selected');
+
+    if (el.classList.contains('selected')) {
+        if (!selectedDevelopers.includes(dev)) selectedDevelopers.push(dev);
+    } else {
+        selectedDevelopers = selectedDevelopers.filter(d => d !== dev);
+    }
+
+    await loadSoftware();
+}
+
+async function loadSoftware() {
+    if (selectedDevelopers.length === 0) {
+        document.getElementById('softwareList').innerHTML =
+            '<div style="padding:12px; color:#999; font-size:13px">Select developers first...</div>';
+        return;
+    }
+
+    const sid  = getSessionId();
+    const devs = selectedDevelopers.join(',');
+    const data = await apiFetch(
+        `/tables/software-by-developer?session_id=${sid}&developers=${encodeURIComponent(devs)}`
+    );
+    if (!data?.success) return;
+
+    const container = document.getElementById('softwareList');
+
+    // Restore previously selected software
+    const prevSelected = getSoftware();
+
+    container.innerHTML = data.data.map(sw => {
+        const isSelected = prevSelected.includes(sw.software);
+        return `
+        <div class="multi-select-item ${isSelected ? 'selected' : ''}"
+             onclick="toggleSoftware('${sw.software}', this)">
+            <input type="checkbox" ${isSelected ? 'checked' : ''}>
+            ${sw.software}
+            <span style="margin-left:auto; font-size:11px; color:#999">
+                ${sw.developer}
+            </span>
+        </div>`;
+    }).join('');
+
+    if (isSelected) selectedSoftware = prevSelected;
+}
+
+function toggleSoftware(sw, el) {
+    el.classList.toggle('selected');
+    el.querySelector('input').checked = el.classList.contains('selected');
+
+    if (el.classList.contains('selected')) {
+        if (!selectedSoftware.includes(sw)) selectedSoftware.push(sw);
+    } else {
+        selectedSoftware = selectedSoftware.filter(s => s !== sw);
+    }
+
+    Session.set('software', selectedSoftware);
+    updateSummary();
+    updateNav();
+}
+
+function saveInputs() {
+    const inputs = {
+        annual:  parseFloat(document.getElementById('inputAnnual').value)  || 0,
+        advent:  parseFloat(document.getElementById('inputAdvent').value)  || 0,
+        onshore: parseFloat(document.getElementById('inputOnshore').value) || 0,
+    };
+    Session.set('inputs', inputs);
+    toast('Inputs saved to session!', 'success');
+    updateSummary();
+}
+
+function updateSummary() {
+    const inputs = getInputs();
+    const summary = document.getElementById('selectionSummary');
+    const chips   = document.getElementById('summaryChips');
+
+    if (selectedSoftware.length === 0) {
+        summary.style.display = 'none';
+        return;
+    }
+
+    summary.style.display = 'block';
+    chips.innerHTML = `
+        <div class="chips">
+            ${selectedSoftware.map(s => `<span class="chip"> ${s}</span>`).join('')}
+            <span class="chip">Annual: ${inputs.annual}</span>
+            <span class="chip">Advent: ${inputs.advent}</span>
+            <span class="chip">Onshore: ${inputs.onshore}</span>
+        </div>
+    `;
+}
+
+// Init
+document.addEventListener('DOMContentLoaded', () => {
+    const inputs = getInputs();
+    document.getElementById('inputAnnual').value  = inputs.annual;
+    document.getElementById('inputAdvent').value  = inputs.advent;
+    document.getElementById('inputOnshore').value = inputs.onshore;
+
+    loadDevelopers();
+    updateSummary();
+});
+</script>
+{% endblock %}

@@ -1,59 +1,53 @@
 # routers/download.py
 
 import os
-from fastapi import APIRouter, Query
+from fastapi import APIRouter
 from fastapi.responses import FileResponse
+from pydantic import BaseModel
+from typing import Optional
 from core.session import get_session
-from services.excel_writer import get_output_path, generate_report
+from services.excel_writer import generate_report
 from services.table_builder import (
-    build_table1,
-    build_table2,
-    build_table3,
-    build_table4,
-    build_table_keystore,
+    build_table1, build_table2, build_table3,
+    build_table4, build_table_keystore,
 )
 
 router = APIRouter(prefix="/download", tags=["Download"])
 
 
-@router.get("/")
-def download(
-    session_id: str   = Query(...),
-    software:   str   = Query(...),
-    annual:     float = Query(None),
-    advent:     float = Query(None),
-    onshore:    float = Query(None),
-):
-    """
-    Builds all 5 tables and pushes Excel file to outputs/ folder.
-    Returns the file as download.
-    """
-    session   = get_session(session_id)
-    sw_list   = [s.strip() for s in software.split(",")]
-    annual_v  = annual  if annual  is not None else session.user_inputs["annual"]
-    advent_v  = advent  if advent  is not None else session.user_inputs["advent"]
-    onshore_v = onshore if onshore is not None else session.user_inputs["onshore"]
+class DownloadRequest(BaseModel):
+    session_id:      str
+    software:        list
+    annual:          float = 0
+    advent:          float = 0
+    onshore:         float = 0
+    keystore_values: dict  = {}
 
-    # Build all tables
+
+@router.post("/")
+def download(req: DownloadRequest):
+    session = get_session(req.session_id)
+    sw_list = req.software
+
     table1_data = build_table1(
         sw_agg        = session.sw_agg,
         software_list = sw_list,
-        annual        = annual_v,
+        annual        = req.annual,
     )
     table2_data = build_table2(
         records       = session.records,
         sw_agg        = session.sw_agg,
         software_list = sw_list,
-        advent        = advent_v,
-        onshore       = onshore_v,
+        advent        = req.advent,
+        onshore       = req.onshore,
     )
     table3_data = build_table3(
         records       = session.records,
         sw_agg        = session.sw_agg,
         software_list = sw_list,
-        annual        = annual_v,
-        advent        = advent_v,
-        onshore       = onshore_v,
+        annual        = req.annual,
+        advent        = req.advent,
+        onshore       = req.onshore,
     )
     table4_data = build_table4(
         records       = session.records,
@@ -64,12 +58,12 @@ def download(
         records       = session.records,
         sw_agg        = session.sw_agg,
         software_list = sw_list,
-        annual_v  = annual  or 0,
-        advent_v  = advent  or 0,
-        onshore_v = onshore or 0,
-     )
+        annual        = req.annual,
+        advent        = req.advent,
+        onshore       = req.onshore,
+        user_values   = req.keystore_values,
+    )
 
-    # Generate and save Excel
     output_path = generate_report(
         file_path     = session.file_path,
         table1_data   = table1_data,
