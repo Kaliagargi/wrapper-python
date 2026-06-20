@@ -77,24 +77,28 @@ async function downloadReport() {
         return;
     }
 
-    const annual          = parseFloat(document.getElementById('dlAnnual').value)  || 0;
-    const advent          = parseFloat(document.getElementById('dlAdvent').value)  || 0;
-    const onshore         = parseFloat(document.getElementById('dlOnshore').value) || 0;
-    const keystoreValues  = Session.get('keystore_values') || {};
+    const annual         = parseFloat(document.getElementById('dlAnnual').value)  || 0;
+    const advent         = parseFloat(document.getElementById('dlAdvent').value)  || 0;
+    const onshore        = parseFloat(document.getElementById('dlOnshore').value) || 0;
+
+    // Read temp keystore values
+    const keystoreValues = JSON.parse(
+        sessionStorage.getItem('keystore_values_temp') || '{}'
+    );
 
     showLoading('Generating Excel report...');
 
     try {
         const response = await fetch('/download/', {
             method:  'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body:    JSON.stringify({
-                session_id:       sid,
-                software:         software,
-                annual:           annual,
-                advent:           advent,
-                onshore:          onshore,
-                keystore_values:  keystoreValues,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                session_id:      sid,
+                software:        software,
+                annual:          annual,
+                advent:          advent,
+                onshore:         onshore,
+                keystore_values: keystoreValues,
             }),
         });
 
@@ -105,19 +109,21 @@ async function downloadReport() {
             return;
         }
 
-        // Convert response to downloadable file
-        const blob     = await response.blob();
-        const url      = window.URL.createObjectURL(blob);
-        const a        = document.createElement('a');
-        a.href         = url;
-        a.download     = 'licence_report.xlsx';
+        const blob = await response.blob();
+        const url  = window.URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'licence_report.xlsx';
         document.body.appendChild(a);
         a.click();
         a.remove();
         window.URL.revokeObjectURL(url);
 
+        // Clear temp values after download
+        sessionStorage.removeItem('keystore_values_temp');
+
         hideLoading();
-        toast('Download started!', 'success');
+        toast('Download complete!', 'success');
 
     } catch(e) {
         hideLoading();

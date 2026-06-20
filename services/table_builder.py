@@ -375,6 +375,7 @@ def build_table_keystore(
     records:       list,
     sw_agg:        dict,
     software_list: list,
+    user_values:   dict = {},
     
 ) -> dict:
     from core.errors import SoftwareNotFoundError
@@ -410,6 +411,8 @@ def build_table_keystore(
                     dept     = label,
                     value    = key_id,
                 )
+                if value is None:
+                   value = user_values.get(sw, {}).get(label, {}).get(key_id, None)
 
                 keys_list.append({
                     "label":  label,

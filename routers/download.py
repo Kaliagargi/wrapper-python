@@ -58,6 +58,7 @@ def download(req: DownloadRequest):
         records       = session.records,
         sw_agg        = session.sw_agg,
         software_list = sw_list,
+        user_values   = req.keystore_values, 
      
     )
 
