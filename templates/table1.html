@@ -3,24 +3,33 @@
 
 {% block content %}
 <div class="page-header">
-    <h2> Licence Summary</h2>
+    <h2>Licence Summary</h2>
     <p>Total, Own, Lease, Annual and Order licences per software.</p>
 </div>
 
+<!-- Software Selector -->
+<div class="card">
+    <div class="card-title">🖥️ Select Software to Display</div>
+    <div id="swSelector" style="display:flex; flex-wrap:wrap; gap:12px;">
+        <!-- populated by JS -->
+    </div>
+</div>
+
+<!-- Table -->
 <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
         <div class="card-title" style="margin:0">Results</div>
         <div style="display:flex; gap:8px">
             <button class="btn btn-outline btn-sm" onclick="toggleEdit(this)"
-                    data-editing="false"> Edit</button>
+                    data-editing="false">✏️ Edit</button>
             <button class="btn btn-primary btn-sm" onclick="buildTable()">
-                Build Table
+                🔄 Build Table
             </button>
         </div>
     </div>
     <div id="tableContainer">
         <div class="alert alert-info">
-            Click "Build Table" to generate the Licence Summary.
+            Select software above and click "Build Table".
         </div>
     </div>
 </div>
@@ -28,36 +37,80 @@
 
 {% block scripts %}
 <script>
-let tableData = [];
+let tableData        = [];
+let selectedForTable = [];
 
+// ── Load Software Checkboxes ──────────────
+function loadSwSelector() {
+    const allSw    = getSoftware();
+    const saved    = Session.get('selected_for_tables') || allSw;
+    selectedForTable = saved;
+
+    const container = document.getElementById('swSelector');
+    container.innerHTML = allSw.map(sw => {
+        const checked = saved.includes(sw);
+        return `
+        <label style="display:flex; align-items:center; gap:8px;
+                       padding:8px 16px; border-radius:var(--radius);
+                       border:1.5px solid ${checked ? 'var(--accent)' : 'var(--gray-200)'};
+                       background:${checked ? 'var(--accent-light)' : 'white'};
+                       cursor:pointer; font-size:13px; font-weight:600;
+                       transition:all 0.15s;" id="swlabel_${sw}">
+            <input type="checkbox" ${checked ? 'checked' : ''}
+                   onchange="toggleSwForTable('${sw}', this)"
+                   style="accent-color:var(--accent)">
+            ${sw}
+        </label>`;
+    }).join('');
+}
+
+// ── Toggle Software for Table ─────────────
+function toggleSwForTable(sw, checkbox) {
+    const label = document.getElementById(`swlabel_${sw}`);
+
+    if (checkbox.checked) {
+        if (!selectedForTable.includes(sw)) selectedForTable.push(sw);
+        label.style.borderColor = 'var(--accent)';
+        label.style.background  = 'var(--accent-light)';
+    } else {
+        selectedForTable = selectedForTable.filter(s => s !== sw);
+        label.style.borderColor = 'var(--gray-200)';
+        label.style.background  = 'white';
+    }
+
+    Session.set('selected_for_tables', selectedForTable);
+}
+
+// ── Build Table ───────────────────────────
 async function buildTable() {
-    const sid      = getSessionId();
-    const software = getSoftware();
-    const inputs   = getInputs();
+    const sid = getSessionId();
 
-    if (!sid || software.length === 0) {
-        toast('Please upload a file and select software first', 'error');
+    if (!sid || selectedForTable.length === 0) {
+        toast('Please select at least one software', 'error');
         return;
     }
 
     showLoading('Building Licence Summary...');
 
-    const params = new URLSearchParams({
-        session_id: sid,
-        software:   software.join(','),
-        annual:     inputs.annual,
-        advent:     inputs.advent,
-    });
+    // Build per software using their own inputs
+    const allRows = [];
 
-    const data = await apiFetch(`/tables/table1?${params}`);
-    hideLoading();
+    for (const sw of selectedForTable) {
+        const inputs = getInputs(sw);
+        const params = new URLSearchParams({
+            session_id: sid,
+            software:   sw,
+            annual:     inputs.annual,
+        });
 
-    if (!data?.success) {
-        toast('Failed to build table', 'error');
-        return;
+        const data = await apiFetch(`/tables/table1?${params}`);
+        if (data?.success) {
+            allRows.push(...data.data);
+        }
     }
 
-    tableData = data.data;
+    hideLoading();
+    tableData = allRows;
 
     const headers = ['Developer', 'Software', 'Total Lic', 'Own Lic',
                      'Lease Lic', 'Annual', 'Order'];
@@ -75,5 +128,9 @@ async function buildTable() {
     markDone('table1');
     toast('Licence Summary built!', 'success');
 }
+
+document.addEventListener('DOMContentLoaded', loadSwSelector);
+console.log('software:', Session.get('software'));
+console.log('selected_for_tables:', Session.get('selected_for_tables'));
 </script>
 {% endblock %}

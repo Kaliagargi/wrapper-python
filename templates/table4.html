@@ -6,6 +6,12 @@
     <h2> ISL — In Stock Licences</h2>
     <p>LTM and Share breakdown per dept per software.</p>
 </div>
+<div class="card">
+    <div class="card-title">🖥️ Select Software to Display</div>
+    <div id="swSelector" style="display:flex; flex-wrap:wrap; gap:12px;">
+        <!-- populated by JS -->
+    </div>
+</div>
 
 <div class="card">
     <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
@@ -28,32 +34,77 @@
 
 {% block scripts %}
 <script>
-async function buildTable() {
-    const sid      = getSessionId();
-    const software = getSoftware();
+let selectedForTable = [];
 
-    if (!sid || software.length === 0) {
-        toast('Please upload a file and select software first', 'error');
+// ── Load Software Checkboxes ──────────────
+function loadSwSelector() {
+    const allSw    = getSoftware();
+    const saved    = Session.get('selected_for_tables') || allSw;
+    selectedForTable = saved;
+
+    const container = document.getElementById('swSelector');
+    container.innerHTML = allSw.map(sw => {
+        const checked = saved.includes(sw);
+        return `
+        <label style="display:flex; align-items:center; gap:8px;
+                       padding:8px 16px; border-radius:8px;
+                       border:1.5px solid ${checked ? '#2563EB' : '#E5E7EB'};
+                       background:${checked ? '#EFF6FF' : 'white'};
+                       cursor:pointer; font-size:13px; font-weight:600;
+                       transition:all 0.15s;" id="swlabel_${sw}">
+            <input type="checkbox" ${checked ? 'checked' : ''}
+                   onchange="toggleSwForTable('${sw}', this)"
+                   style="accent-color:#2563EB; width:15px; height:15px;">
+            ${sw}
+        </label>`;
+    }).join('');
+}
+
+
+// ── Toggle Software for Table ─────────────
+function toggleSwForTable(sw, checkbox) {
+    const label = document.getElementById(`swlabel_${sw}`);
+
+    if (checkbox.checked) {
+        if (!selectedForTable.includes(sw)) selectedForTable.push(sw);
+        label.style.borderColor = '#2563EB';
+        label.style.background  = '#EFF6FF';
+    } else {
+        selectedForTable = selectedForTable.filter(s => s !== sw);
+        label.style.borderColor = '#E5E7EB';
+        label.style.background  = 'white';
+    }
+
+    Session.set('selected_for_tables', selectedForTable);
+}
+async function buildTable() {
+    const sid = getSessionId();
+
+    if (!sid || selectedForTable.length === 0) {
+        toast('Please select at least one software', 'error');
         return;
     }
 
     showLoading('Building ISL table...');
 
-    const params = new URLSearchParams({
-        session_id: sid,
-        software:   software.join(','),
-    });
+    const allData = {};
 
-    const data = await apiFetch(`/tables/table4?${params}`);
-    hideLoading();
+    for (const sw of selectedForTable) {
+        const params = new URLSearchParams({
+            session_id: sid,
+            software:   sw,           
+        });
 
-    if (!data?.success) {
-        toast('Failed to build table', 'error');
-        return;
+        const data = await apiFetch(`/tables/table4?${params}`);
+        if (data?.success) {
+            Object.assign(allData, data.data);
+        }
     }
 
+    hideLoading();
+
     const rows = [];
-    Object.entries(data.data).forEach(([sw, swData]) => {
+    Object.entries(allData).forEach(([sw, swData]) => {   
         swData.rows.forEach(r => {
             rows.push({
                 software:  sw,
@@ -73,5 +124,6 @@ async function buildTable() {
     markDone('table4');
     toast('ISL table built!', 'success');
 }
+document.addEventListener('DOMContentLoaded', loadSwSelector);
 </script>
 {% endblock %}

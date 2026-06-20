@@ -3,77 +3,55 @@
 
 {% block content %}
 <div class="page-header">
-    <h2>Dashboard</h2>
-    <p>Select developers, software and set input values.</p>
+    <h2>⚙️ Dashboard</h2>
+    <p>Select developers, software and set input values per software.</p>
 </div>
 
-<div style="display:grid; grid-template-columns:1fr 1fr; gap:20px">
-
-    <!-- Developer Select -->
-    <div class="card">
-        <div class="card-title"> Select Developers</div>
-        <div id="developerList" class="multi-select">
-            <div style="padding:12px; color:#999; font-size:13px">Loading...</div>
-        </div>
-    </div>
-
-    <!-- Software Select -->
-    <div class="card">
-        <div class="card-title"> Select Software</div>
-        <div id="softwareList" class="multi-select">
-            <div style="padding:12px; color:#999; font-size:13px">
-                Select developers first...
-            </div>
-        </div>
-    </div>
-
-</div>
-
-<!-- Inputs -->
+<!-- Developer Select -->
 <div class="card">
-    <div class="card-title"> Input Values</div>
-    <p style="font-size:13px; color:#757575; margin-bottom:16px">
-        These values are used across all tables. They are saved in your browser session.
-    </p>
-    <div class="form-row">
-        <div class="form-group">
-            <label class="form-label">Annual Licences</label>
-            <input type="number" class="form-control" id="inputAnnual"
-                   placeholder="0" min="0">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Advent</label>
-            <input type="number" class="form-control" id="inputAdvent"
-                   placeholder="0" min="0">
-        </div>
-        <div class="form-group">
-            <label class="form-label">Onshore</label>
-            <input type="number" class="form-control" id="inputOnshore"
-                   placeholder="0" min="0">
-        </div>
+    <div class="card-title">👤 Select Developers</div>
+    <div id="developerList" class="multi-select">
+        <div style="padding:12px; color:#999; font-size:13px">Loading...</div>
     </div>
-    <button class="btn btn-yellow" onclick="saveInputs()">
-        Save Inputs
-    </button>
 </div>
 
-<!-- Selected Summary -->
-<div class="card" id="selectionSummary" style="display:none">
-    <div class="card-title">Current Selection</div>
-    <div id="summaryChips"></div>
-    <div style="margin-top:16px">
-        <a href="/table1" class="btn btn-primary">Go to Tables</a>
+<!-- Software + Inputs -->
+<div class="card">
+    <div class="card-title">🖥️ Select Software & Set Inputs</div>
+    <p style="font-size:13px; color:var(--gray-500); margin-bottom:16px">
+        Select software and fill in values. Advent only appears for SP3D.
+    </p>
+    <div id="softwareInputList">
+        <div style="padding:12px; color:#999; font-size:13px">
+            Select developers first...
+        </div>
     </div>
+</div>
+
+<!-- Save Button -->
+<div style="display:flex; gap:12px; align-items:center">
+    <button class="btn btn-primary btn-lg" onclick="saveAndContinue()">
+        💾 Save & Continue to Tables →
+    </button>
+    <span id="saveStatus" style="font-size:13px; color:var(--gray-500)"></span>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
+const SP3D_NAMES = ['sp3d', 'smartplant', 'smartplant 3d', 'sp3d '];
+
 let selectedDevelopers = [];
 let selectedSoftware   = [];
 
+// ── Check if software is SP3D ─────────────
+function isSP3D(sw) {
+    return SP3D_NAMES.some(n => sw.toLowerCase().includes(n));
+}
+
+// ── Load Developers ───────────────────────
 async function loadDevelopers() {
-    const sid  = getSessionId();
+    const sid = getSessionId();
     if (!sid) { window.location.href = '/'; return; }
 
     const data = await apiFetch(`/tables/developer-list?session_id=${sid}`);
@@ -87,6 +65,7 @@ async function loadDevelopers() {
     `).join('');
 }
 
+// ── Toggle Developer ──────────────────────
 async function toggleDeveloper(dev, el) {
     el.classList.toggle('selected');
     el.querySelector('input').checked = el.classList.contains('selected');
@@ -97,12 +76,13 @@ async function toggleDeveloper(dev, el) {
         selectedDevelopers = selectedDevelopers.filter(d => d !== dev);
     }
 
-    await loadSoftware();
+    await loadSoftwareWithInputs();
 }
 
-async function loadSoftware() {
+// ── Load Software with Input Fields ──────
+async function loadSoftwareWithInputs() {
     if (selectedDevelopers.length === 0) {
-        document.getElementById('softwareList').innerHTML =
+        document.getElementById('softwareInputList').innerHTML =
             '<div style="padding:12px; color:#999; font-size:13px">Select developers first...</div>';
         return;
     }
@@ -114,83 +94,130 @@ async function loadSoftware() {
     );
     if (!data?.success) return;
 
-    const container = document.getElementById('softwareList');
+    // Load previously saved inputs
+    const savedInputs    = getSavedInputs();
+    const prevSelected   = Session.get('software') || [];
 
-    // Restore previously selected software
-    const prevSelected = getSoftware();
-
+    const container = document.getElementById('softwareInputList');
     container.innerHTML = data.data.map(sw => {
-        const isSelected = prevSelected.includes(sw.software);
+        const swName     = sw.software;
+        const isSelected = prevSelected.includes(swName);
+        const inputs     = savedInputs[swName] || {annual:0, advent:0, onshore:0};
+        const showAdvent = isSP3D(swName);
+
         return `
-        <div class="multi-select-item ${isSelected ? 'selected' : ''}"
-             onclick="toggleSoftware('${sw.software}', this)">
-            <input type="checkbox" ${isSelected ? 'checked' : ''}>
-            ${sw.software}
-            <span style="margin-left:auto; font-size:11px; color:#999">
-                ${sw.developer}
-            </span>
+        <div class="software-input-card ${isSelected ? 'selected' : ''}"
+             id="swcard_${swName}"
+             style="border:1.5px solid var(--gray-200); border-radius:var(--radius);
+                    padding:16px; margin-bottom:12px; transition: all 0.15s;">
+
+            <div style="display:flex; align-items:center; gap:12px; margin-bottom:${isSelected ? '16px' : '0'}">
+                <input type="checkbox" id="sw_${swName}"
+                       ${isSelected ? 'checked' : ''}
+                       onchange="toggleSoftware('${swName}', this)"
+                       style="width:16px; height:16px; accent-color:var(--accent)">
+                <label for="sw_${swName}"
+                       style="font-size:14px; font-weight:600; cursor:pointer; flex:1">
+                    🖥️ ${swName}
+                    <span style="font-size:11px; color:var(--gray-400); font-weight:400; margin-left:4px">
+                        ${sw.developer}
+                    </span>
+                </label>
+                ${showAdvent ? '<span class="pill pill-blue" style="font-size:10px">SP3D</span>' : ''}
+            </div>
+
+            <div id="inputs_${swName}"
+                 style="display:${isSelected ? 'grid' : 'none'};
+                        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+                        gap:12px; margin-top:4px;">
+                <div class="form-group" style="margin:0">
+                    <label class="form-label">Annual</label>
+                    <input type="number" class="form-control"
+                           id="annual_${swName}"
+                           value="${inputs.annual}" min="0"
+                           oninput="autoSaveInputs('${swName}')">
+                </div>
+                ${showAdvent ? `
+                <div class="form-group" style="margin:0">
+                    <label class="form-label">Advent</label>
+                    <input type="number" class="form-control"
+                           id="advent_${swName}"
+                           value="${inputs.advent}" min="0"
+                           oninput="autoSaveInputs('${swName}')">
+                </div>` : ''}
+                <div class="form-group" style="margin:0">
+                    <label class="form-label">Onshore</label>
+                    <input type="number" class="form-control"
+                           id="onshore_${swName}"
+                           value="${inputs.onshore}" min="0"
+                           oninput="autoSaveInputs('${swName}')">
+                </div>
+            </div>
         </div>`;
     }).join('');
 
-    if (isSelected) selectedSoftware = prevSelected;
+    selectedSoftware = prevSelected;
 }
 
-function toggleSoftware(sw, el) {
-    el.classList.toggle('selected');
-    el.querySelector('input').checked = el.classList.contains('selected');
+// ── Toggle Software ───────────────────────
+function toggleSoftware(sw, checkbox) {
+    const card   = document.getElementById(`swcard_${sw}`);
+    const inputs = document.getElementById(`inputs_${sw}`);
 
-    if (el.classList.contains('selected')) {
+    if (checkbox.checked) {
         if (!selectedSoftware.includes(sw)) selectedSoftware.push(sw);
+        card.style.borderColor = 'var(--accent)';
+        card.style.background  = 'var(--accent-light)';
+        inputs.style.display   = 'grid';
     } else {
         selectedSoftware = selectedSoftware.filter(s => s !== sw);
+        card.style.borderColor = 'var(--gray-200)';
+        card.style.background  = 'white';
+        inputs.style.display   = 'none';
     }
 
     Session.set('software', selectedSoftware);
-    updateSummary();
     updateNav();
 }
 
-function saveInputs() {
-    const inputs = {
-        annual:  parseFloat(document.getElementById('inputAnnual').value)  || 0,
-        advent:  parseFloat(document.getElementById('inputAdvent').value)  || 0,
-        onshore: parseFloat(document.getElementById('inputOnshore').value) || 0,
-    };
-    Session.set('inputs', inputs);
-    toast('Inputs saved to session!', 'success');
-    updateSummary();
+// ── Auto Save Inputs ──────────────────────
+function autoSaveInputs(sw) {
+    const annual  = parseFloat(document.getElementById(`annual_${sw}`)?.value)  || 0;
+    const advent  = parseFloat(document.getElementById(`advent_${sw}`)?.value)  || 0;
+    const onshore = parseFloat(document.getElementById(`onshore_${sw}`)?.value) || 0;
+
+    const allInputs      = getSavedInputs();
+    allInputs[sw]        = {annual, advent, onshore};
+    Session.set('inputs', allInputs);
 }
 
-function updateSummary() {
-    const inputs = getInputs();
-    const summary = document.getElementById('selectionSummary');
-    const chips   = document.getElementById('summaryChips');
+// ── Get Saved Inputs ──────────────────────
+function getSavedInputs() {
+    return Session.get('inputs') || {};
+}
 
+// ── Save & Continue ───────────────────────
+function saveAndContinue() {
     if (selectedSoftware.length === 0) {
-        summary.style.display = 'none';
+        toast('Please select at least one software', 'error');
         return;
     }
 
-    summary.style.display = 'block';
-    chips.innerHTML = `
-        <div class="chips">
-            ${selectedSoftware.map(s => `<span class="chip"> ${s}</span>`).join('')}
-            <span class="chip">Annual: ${inputs.annual}</span>
-            <span class="chip">Advent: ${inputs.advent}</span>
-            <span class="chip">Onshore: ${inputs.onshore}</span>
-        </div>
-    `;
+    // Save all inputs for selected software
+    selectedSoftware.forEach(sw => autoSaveInputs(sw));
+    Session.set('software', selectedSoftware);
+
+    // Default selected_for_tables to all selected
+    Session.set('selected_for_tables', selectedSoftware);
+
+    updateNav();
+    toast('Saved! Redirecting to tables...', 'success');
+    setTimeout(() => window.location.href = '/table1', 800);
 }
 
-// Init
+// ── Init ──────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
-    const inputs = getInputs();
-    document.getElementById('inputAnnual').value  = inputs.annual;
-    document.getElementById('inputAdvent').value  = inputs.advent;
-    document.getElementById('inputOnshore').value = inputs.onshore;
-
     loadDevelopers();
-    updateSummary();
 });
 </script>
 {% endblock %}

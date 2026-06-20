@@ -15,7 +15,14 @@ const Session = {
 
 function getSessionId()  { return Session.get('session_id'); }
 function getSoftware()   { return Session.get('software') || []; }
-function getInputs()     { return Session.get('inputs') || {annual:0, advent:0, onshore:0}; }
+// Replace old getInputs() with:
+function getInputs(software = null) {
+    const allInputs = Session.get('inputs') || {};
+    if (software) {
+        return allInputs[software] || {annual: 0, advent: 0, onshore: 0};
+    }
+    return allInputs;
+}
 function getUploadData() { return Session.get('upload_data') || {}; }
 
 

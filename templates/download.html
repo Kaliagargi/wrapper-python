@@ -71,17 +71,19 @@ document.addEventListener('DOMContentLoaded', () => {
 async function downloadReport() {
     const sid      = getSessionId();
     const software = getSoftware();
+    const allInputs = getInputs(); // gets full dict
 
     if (!sid || software.length === 0) {
         toast('Please upload a file and select software first', 'error');
         return;
     }
 
-    const annual         = parseFloat(document.getElementById('dlAnnual').value)  || 0;
-    const advent         = parseFloat(document.getElementById('dlAdvent').value)  || 0;
-    const onshore        = parseFloat(document.getElementById('dlOnshore').value) || 0;
+    // Use first software's inputs as global
+    // since backend still takes single annual/advent/onshore
+    // We'll fix this properly next
+    const firstSw = software[0];
+    const inputs  = allInputs[firstSw] || {annual:0, advent:0, onshore:0};
 
-    // Read temp keystore values
     const keystoreValues = JSON.parse(
         sessionStorage.getItem('keystore_values_temp') || '{}'
     );
@@ -95,10 +97,11 @@ async function downloadReport() {
             body: JSON.stringify({
                 session_id:      sid,
                 software:        software,
-                annual:          annual,
-                advent:          advent,
-                onshore:         onshore,
+                annual:          inputs.annual,
+                advent:          inputs.advent,
+                onshore:         inputs.onshore,
                 keystore_values: keystoreValues,
+                per_sw_inputs:   allInputs,  // send all for future use
             }),
         });
 
@@ -119,9 +122,7 @@ async function downloadReport() {
         a.remove();
         window.URL.revokeObjectURL(url);
 
-        // Clear temp values after download
         sessionStorage.removeItem('keystore_values_temp');
-
         hideLoading();
         toast('Download complete!', 'success');
 
