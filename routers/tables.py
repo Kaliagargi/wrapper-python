@@ -46,6 +46,7 @@ def table1(
     session_id: str   = Query(...),
     software:   str   = Query(...),
     annual:     float = Query(None),
+    advent:     float = Query(None),
 ):
     session  = get_session(session_id)
     sw_list  = [s.strip() for s in software.split(",")]
@@ -55,6 +56,7 @@ def table1(
         sw_agg        = session.sw_agg,
         software_list = sw_list,
         annual        = annual_v,
+        advent        = advent,
     )
 
     # Save to Excel immediately

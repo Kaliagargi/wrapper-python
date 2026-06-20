@@ -58,10 +58,7 @@ def download(req: DownloadRequest):
         records       = session.records,
         sw_agg        = session.sw_agg,
         software_list = sw_list,
-        annual        = req.annual,
-        advent        = req.advent,
-        onshore       = req.onshore,
-        user_values   = req.keystore_values,
+     
     )
 
     output_path = generate_report(

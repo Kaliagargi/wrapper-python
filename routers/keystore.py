@@ -2,8 +2,7 @@
 
 from fastapi import APIRouter, Query
 from core.session import get_session
-from core.keystore import toggle_key, add_key
-from services.table_builder import build_table_keystore
+from services.table_builder import build_table_keystore,toggle_key, add_key
 
 router = APIRouter(prefix="/keystore", tags=["Keystore"])
 
@@ -12,9 +11,8 @@ router = APIRouter(prefix="/keystore", tags=["Keystore"])
 def get_keystore_table(
     session_id: str   = Query(...),
     software:   str   = Query(...),
-    annual:     float = Query(0),
-    advent:     float = Query(0),
-    onshore:    float = Query(0),
+    user_values:   dict = {},
+    
 ):
     session = get_session(session_id)
     sw_list = [s.strip() for s in software.split(",")]
@@ -23,9 +21,7 @@ def get_keystore_table(
         records       = session.records,
         sw_agg        = session.sw_agg,
         software_list = sw_list,
-        annual        = annual,
-        advent        = advent,
-        onshore       = onshore,
+        
     )
 
     return {"success": True, "data": data}
@@ -68,17 +64,7 @@ def add_key_endpoint(
             "message": f"Software '{software}' not found in Excel data.",
             "available_software": list(session.sw_agg.keys()),
         }
-
-    sw_records  = [r for r in session.records if r["software"] == software]
-    valid_depts = {r["dept"].lower() for r in sw_records}
-
-    if dept.strip().lower() not in valid_depts:
-        return {
-            "success": False,
-            "message": f"Dept '{dept}' not found for software '{software}'.",
-            "available_depts": list(valid_depts),
-        }
-
+   
     success = add_key(software, dept, key_id, active)
 
     return {

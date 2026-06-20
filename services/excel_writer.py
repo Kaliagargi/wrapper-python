@@ -120,7 +120,7 @@ def write_sheet1(wb, table1_data: list):
         val(ws, row, 4, d["own_lic"],   alt=alt)
         val(ws, row, 5, d["lease_lic"], alt=alt)
         val(ws, row, 6, d["annual"],    alt=alt)
-        val(ws, row, 7, d["order"],     alt=alt)
+        val(ws, row, 7, d["order_lic"],     alt=alt)
         row += 1
 
     total_row(ws, row, "TOTAL", {

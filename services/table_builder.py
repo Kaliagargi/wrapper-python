@@ -1,436 +1,383 @@
-# services/table_builder.py
-
+import json
 import math
-
-
-# ─────────────────────────────────────────────
-# HELPERS
-# ─────────────────────────────────────────────
-
+from pickle import FALSE
+from tkinter import SEL_FIRST
+from unittest import result
+from core.errors import SoftwareNotFoundError
 def safe_num(value):
     try:
         return float(value) if value is not None else 0
-    except (ValueError, TypeError):
+    except(ValueError,TypeError):
         return 0
+    
+def split_ltm_share(value:float) ->tuple:
+    ltm = math.floor(value)
+    share = round(value-ltm,4)
+    return ltm,share
 
-
-def split_ltm_share(value: float) -> tuple:
-    ltm   = math.floor(value)
-    share = round(value - ltm, 4)
-    return ltm, share
-
-
-# ─────────────────────────────────────────────
-# DEVELOPER & SOFTWARE LISTS
-# ─────────────────────────────────────────────
-
-def get_developer_list(sw_agg: dict) -> list:
-    return list({
+def get_developer_list(sw_agg: dict) ->list:
+    return[{
         data["developer"]
         for data in sw_agg.values()
         if data["developer"]
-    })
+    }]
 
-
-def get_software_list(sw_agg: dict) -> list:
-    return [
+    
+def get_software_list(sw_agg: dict) ->list:
+    return[
         {
-            "software":  sw,
-            "developer": data["developer"],
-            "lease_lic": data["lease_lic"],
-            "total_lic": data["total_lic"],
+            "software":sw,
+            "developer":data["developer"],
+            "lease_lic":data["lease_lic"],
+            "total_lic":data["total_lic"],
+            "dept":data["depts"]
         }
-        for sw, data in sw_agg.items()
-        if safe_num(data["lease_lic"]) > 0
+        for sw,data in sw_agg.items()
+        if safe_num(data["lease_lic"])>0
     ]
-
-
-def get_software_by_developer(sw_agg: dict, developers: list) -> list:
-    return [
-        {
-            "software":  sw,
-            "developer": data["developer"],
-            "lease_lic": data["lease_lic"],
-            "total_lic": data["total_lic"],
+def get_software_by_developer(sw_agg: dict, developers:list) ->list:
+    return[ {
+            "software":sw,
+            "developer":data["developer"],
+            "lease_lic":data["lease_lic"],
+            "total_lic":data["total_lic"],
         }
-        for sw, data in sw_agg.items()
-        if data["developer"] in developers
-        and safe_num(data["lease_lic"]) > 0
-    ]
+    for sw,data in sw_agg.items()
+    if data["developer"] in developers and safe_num(data["lease_lic"])>0 
+   ]
 
-
-# ─────────────────────────────────────────────
-# TABLE 1 — Licence Summary
-# ─────────────────────────────────────────────
-
-def build_table1(
-    sw_agg:        dict,
-    software_list: list,
-    annual:        float = 0,
-) -> list:
-    rows = []
+def build_table1(sw_agg: dict , software_list:list,annual:float = 0,advent:float=0) -> list:
+    rows=[]
     for sw in software_list:
         if sw not in sw_agg:
             continue
-        data     = sw_agg[sw]
-        lease    = safe_num(data["lease_lic"])
+       
+            
+        data = sw_agg[sw]
+        lease = safe_num(data["lease_lic"])
         annual_v = safe_num(annual)
-        order    = lease - annual_v if annual_v > 0 else lease
+        if advent != 0 and sw=="SMARTPLANT 3D":
+            order = lease - annual_v + advent  if annual_v > 0 else lease
+        else: 
+            order = lease - annual_v  if annual_v > 0 else lease
 
         rows.append({
-            "software":  sw,
-            "developer": data["developer"],
-            "total_lic": safe_num(data["total_lic"]),
-            "own_lic":   safe_num(data["own_lic"]),
-            "lease_lic": lease,
-            "annual":    annual_v,
-            "order":     order,
+            "software":sw,
+            "developer":data["developer"],
+            "total_lic":data["total_lic"],
+            "own_lic":safe_num(data["own_lic"]),
+            "lease_lic":lease,
+            "annual":annual_v,
+            "order_lic":order,
         })
     return rows
-
-
-# ─────────────────────────────────────────────
-# TABLE 2 — Allocated
-# ─────────────────────────────────────────────
-
-def build_table2(
-    records:       list,
-    sw_agg:        dict,
-    software_list: list,
-    advent:        float = 0,
-    onshore:       float = 0,
-) -> dict:
+    
+def build_table2(records: list,sw_agg: dict,software_list:list,advent:float=0,onshore:float=0) ->dict:
     from core.errors import SoftwareNotFoundError
-
-    NPP_DEPTS = {"pp", "cv", "el"}
-    result    = {}
-
+    NPP_dept = {"el","in","me-s"}
+    result ={}
     for sw in software_list:
         if sw not in sw_agg:
-            raise SoftwareNotFoundError(sw)
-
-        sw_records   = [r for r in records if r["software"] == sw]
-        dept_ltc     = {}
-        dept_others  = {}
-        total_valdel = 0
-
-        for r in sw_records:
-            dept = r["dept"].lower().strip()
-            if dept not in dept_ltc:
-                dept_ltc[dept]    = 0
-                dept_others[dept] = 0
-            dept_ltc[dept]    += safe_num(r["grand_ltc"])
-            dept_others[dept] += safe_num(r.get("others", 0))
-            total_valdel      += sum(
-                safe_num(p.get("valdel", 0))
-                for p in r["projects"].values()
-            )
-
-        # NPP = PP + CV + EL (each including others)
-        npp_value = sum(
-            dept_ltc.get(d, 0) + dept_others.get(d, 0)
-            for d in NPP_DEPTS
-            if d in dept_ltc
-        )
-
-        rows = []
-
-        if npp_value > 0:
-            rows.append({
-                "label":       "NPP",
-                "description": " + ".join(
-                    d.upper() for d in NPP_DEPTS if d in dept_ltc
-                ),
-                "value": npp_value,
-            })
-
-        # PP — with PL adjustment
-        pp_ltc  = dept_ltc.get("pp", 0)  + dept_others.get("pp", 0)
-        pl_ltc  = dept_ltc.get("pl", 0)  + dept_others.get("pl", 0)
-        own_lic = safe_num(sw_agg[sw]["own_lic"])
-
-        if pp_ltc > 0:
-            pp_value = pp_ltc + pl_ltc - own_lic if pl_ltc > 0 else pp_ltc
-            rows.append({
-                "label":       "PP",
-                "description": "PP + PL - Own" if pl_ltc > 0 else "PP",
-                "value":       pp_value,
-            })
-
-        # CV
-        cv_value = dept_ltc.get("cv", 0) + dept_others.get("cv", 0)
-        if cv_value > 0:
-            rows.append({
-                "label":       "CV",
-                "description": "CV",
-                "value":       cv_value,
-            })
-
-        # Valdel
-        rows.append({
-            "label":       "Valdel",
-            "description": "Sum of all Valdel values",
-            "value":       total_valdel,
-        })
-
-        # Advent
-        advent_v = safe_num(advent)
-        if advent_v > 0:
-            rows.append({
-                "label":       "Advent",
-                "description": "User input",
-                "value":       advent_v,
-            })
-
-        # Onshore
-        onshore_v = safe_num(onshore)
-        if onshore_v > 0:
-            rows.append({
-                "label":       "Onshore",
-                "description": "User input",
-                "value":       onshore_v,
-            })
-
-        # Total
-        total = npp_value + total_valdel + advent_v + onshore_v
-        rows.append({
-            "label":       "Total",
-            "description": "Sum of all",
-            "value":       total,
-        })
-
-        result[sw] = {
-            "developer": sw_agg[sw]["developer"],
-            "rows":      rows,
-        }
-
-    return result
-
-
-# ─────────────────────────────────────────────
-# TABLE 3 — Required
-# ─────────────────────────────────────────────
-
-def build_table3(
-    records:       list,
-    sw_agg:        dict,
-    software_list: list,
-    annual:        float = 0,
-    advent:        float = 0,
-    onshore:       float = 0,
-) -> dict:
-    from core.errors import SoftwareNotFoundError
-
-    result = {}
-
-    for sw in software_list:
-        if sw not in sw_agg:
-            raise SoftwareNotFoundError(sw)
-
-        sw_records   = [r for r in records if r["software"] == sw]
-        data         = sw_agg[sw]
-        lease        = safe_num(data["lease_lic"])
-        annual_v     = safe_num(annual)
-        order        = lease - annual_v if annual_v > 0 else lease
-
-        total_valdel = 0
-        total_pp     = 0
-        total_others = 0
-
-        for r in sw_records:
-            dept = r["dept"].lower().strip()
-            if dept == "pp":
-                total_pp += safe_num(r["grand_ltc"])
-            total_valdel += sum(
-                safe_num(p.get("valdel", 0))
-                for p in r["projects"].values()
-            )
-            total_others += safe_num(r.get("others", 0))
-
-        cec       = total_others
-        vec       = order - cec
-        advent_v  = safe_num(advent)
-        onshore_v = safe_num(onshore)
-        total     = total_valdel + total_pp + cec + vec + advent_v + onshore_v
-
-        rows = [
-            {"label": "Valdel",  "value": total_valdel},
-            {"label": "PP",      "value": total_pp},
-            {"label": "CEC",     "value": cec},
-            {"label": "VEC",     "value": vec},
-        ]
-
-        if onshore_v > 0:
-            rows.append({"label": "Onshore", "value": onshore_v})
-        if advent_v > 0:
-            rows.append({"label": "Advent",  "value": advent_v})
-
-        rows.append({"label": "Total", "value": total})
-
-        result[sw] = {
-            "developer": data["developer"],
-            "order":     order,
-            "rows":      rows,
-        }
-
-    return result
-
-
-# ─────────────────────────────────────────────
-# TABLE 4 — ISL
-# ─────────────────────────────────────────────
-
-def build_table4(
-    records:       list,
-    sw_agg:        dict,
-    software_list: list,
-) -> dict:
-    from core.errors import SoftwareNotFoundError
-
-    result = {}
-
-    for sw in software_list:
-        if sw not in sw_agg:
-            raise SoftwareNotFoundError(sw)
-
+             raise SoftwareNotFoundError(sw)
+        
         sw_records = [r for r in records if r["software"] == sw]
-        rows       = []
+        data = sw_agg[sw]
+        own = safe_num(data["own_lic"])
+
+        dept_ltc={}
+        total_valdel = 0
 
         for r in sw_records:
-            ltc_value  = safe_num(r["grand_ltc"])
-            ltm, share = split_ltm_share(ltc_value)
-            rows.append({
-                "dept":  r["dept"],
-                "ltm":   ltm,
-                "share": share,
-                "total": ltc_value,
+            dept = r["dept"].lower().strip()
+
+            if dept not in dept_ltc:
+                dept_ltc[dept]=0
+            dept_ltc[dept] +=safe_num(r["grand_ltc"])
+            total_valdel +=sum(
+                safe_num(p.get("valdel",0))
+                for p in r["projects"].values()
+            )
+
+            npp_depts_found={
+                d:dept_ltc[d]
+                for d in NPP_dept
+                if d in dept_ltc
+            }
+            npp_value = sum(npp_depts_found.values())
+            rows=[]
+            if npp_value>0:
+                rows.append({
+                "label":"NPP",
+                "discription":"+".join(
+                    d.upper() for d in NPP_dept if d in dept_ltc
+                ),
+                "value":npp_value,
+                
             })
+            new_val = dept_ltc.get("pp", 0)
+            for dept_key in ["pl","pp", "cv"]:
+                if dept_key in dept_ltc:
+                    if dept_key=="pl":
+                        print("this is being executed")
+                        if dept_ltc.get("pl",0)>0: 
+                            print(dept_ltc.get("pp",0))  
+                            print(dept_ltc.get("pl",0)) 
+                            new_val = dept_ltc.get("pp",0)+dept_ltc.get("pl")+r.get("pp",0)+safe_num(r["others"])
+                            print(new_val)
+                        continue
+                    
+                    rows.append({
+                         "label": dept_key.upper(),
+                         "description": dept_key.upper(),
+                         "value": new_val - own if dept_key == "pp" else dept_ltc[dept_key],})
+                   
+            dept_sum = sum((new_val - own) if dept_key == "pp" else dept_ltc[dept_key]for dept_key in ["pp", "cv"] if dept_key in dept_ltc
+)
+            advent_v = safe_num(advent)
+            if advent_v>0:
+                rows.append({
+                    "label":"Advent",
+                    "description":"User_input",
+                    "value":advent_v,
+                })
 
-        total_ltm   = sum(r["ltm"]   for r in rows)
-        total_share = round(sum(r["share"] for r in rows), 4)
-        rows.append({
-            "dept":  "TOTAL",
-            "ltm":   total_ltm,
-            "share": total_share,
-            "total": total_ltm + total_share,
-        })
+            onshore_v = safe_num(onshore)
+            
+            if onshore_v>0:
+                rows.append({
+                    "label":"Onshore",
+                    "description":"onshore",
+                    "value":onshore_v,
+                })
+            total = npp_value + dept_sum + advent_v + onshore_v
+            rows.append({
+                    "label":"Total",    
+                    "description":"Sum of all",
+                    "value":total,
+                })
+            
+            result[sw] = {
+                "developer" : sw_agg[sw]["developer"],
+                "rows":rows,
+            }
 
-        result[sw] = {
-            "developer": sw_agg[sw]["developer"],
-            "rows":      rows,
-        }
+    return result
+
+def build_table3(records:list,sw_agg:dict,software_list:list,annual:float =0,advent:float=0,onshore:float =0) ->dict:
+    from core.errors import SoftwareNotFoundError
+    result = {}
+
+    for sw in software_list:
+        if sw not in sw_agg:
+            raise SoftwareNotFoundError(sw)
+        
+        sw_records = [r for r in records if r["software"] == sw]
+        data = sw_agg[sw]
+
+        lease = safe_num(data["lease_lic"])
+        annual_v = safe_num(annual)
+        order = lease-annual_v if annual_v>0 else lease
+
+        total_valdel = 0
+        total_pp=0
+        total_others=0
+
+        for r in sw_records:
+            dept = r["dept"].lower().strip()
+            if dept =="pp":
+                total_pp +=safe_num(r["grand_ltc"])
+            total_valdel+=sum(
+                safe_num(p.get("valdel",0))
+                for p in r["projects"].values()
+            )
+
+            total_others +=safe_num(r.get("others",0))
+
+            cec = total_others
+            vec= order-cec
+            advent_v = safe_num(advent)
+            onshore_v=safe_num(onshore)
+            total = total_valdel+total_pp+cec+vec+advent_v+onshore_v
+
+            rows = [
+                {"label":"Valdel","value":total_valdel},
+                {"label":"PP","value":total_pp},
+                {"label":"CEC","value":cec},
+                {"label":"VEC","value":vec},
+
+            ]
+
+            if onshore_v>0:
+                rows.append({"label":"Onshore","value":onshore_v})
+            if advent_v:
+                rows.append({"label":"Advent","value":advent_v})
+            rows.append({"label":"Total","value":total})
+
+            result[sw] ={
+                "developer":data["developer"],
+                "order":order,
+                "rows":rows
+            }
 
     return result
 
 
-# ─────────────────────────────────────────────
-# KEYSTORE HELPERS
-# ─────────────────────────────────────────────
+def build_table4(records:list,sw_agg:dict,software_list:list) ->dict:
+    from core.errors import SoftwareNotFoundError
 
-def get_value_for_label(
-    records:  list,
-    sw_agg:   dict,
-    software: str,
-    label:    str,
-    annual:   float = 0,
-    advent:   float = 0,
-    onshore:  float = 0,
-) -> float | None:
-    if software not in sw_agg:
+    results={}
+
+    for sw in software_list:
+        if sw not in sw_agg:
+            raise SoftwareNotFoundError(sw)
+        
+        sw_records = [r for r in records if r["software"] ==sw]
+        rows=[]
+
+        for r in  sw_records:
+            ltc_value = safe_num(r["grand_ltc"])
+            ltm,share = split_ltm_share(ltc_value)
+
+            rows.append({
+                "dept":r["dept"],
+                "ltm":ltm,
+                "share":share,
+                "total":ltc_value,
+            })
+        
+        total_ltm = sum(r["ltm"]  for r in rows)
+        total_share = round(sum(r["share"]  for r in rows),4)
+
+        rows.append({
+            "dept":"TOTAL",
+            "ltm":total_ltm,
+            "share":total_share,
+            "total":total_ltm+total_share
+        })
+        results[sw] ={
+            "developer":sw_agg[sw]["developer"],
+            "rows":rows,
+        }
+    return results
+def load()-> dict:
+    file_path = 'data/keystore_keys.json'
+    with open(file_path, 'r', encoding='utf-8') as file:
+        return json.load(file)
+            
+def save(data:dict):
+    file_path = 'data/keystore_keys.json'
+    with open(file_path, 'w', encoding='utf-8') as feedsjson:
+       json.dump(data, feedsjson, indent=2)
+
+def keys_with_status(software:str,dept:str)->dict:
+    data=load()
+    dept_key=dept
+    sw_data=data.get(software,{})
+    dept_data=sw_data.get(dept_key,{})
+
+    if not dept_data:
+        return {}
+    return {key_id:meta.get("active",True)
+            for key_id,meta in dept_data.items()
+    }
+def toggle_key(software:str,dept:str,key_id:str)->bool:
+    data=load()
+    dept_key=dept.strip()
+    sw_data=data.get(software,{})
+    dept_data=sw_data.get(dept_key,{})
+
+    if key_id not in dept_data:
+        return False
+    
+    current= dept_data[key_id].get("active",True)
+    dept_data[key_id]["active"]=not current
+    save(data)
+    return True
+
+def keystore_calculator(records:list,software:str,dept:str,value:str)->float |None:
+    NPP_dept = {"EL","IN","ME-S"}        
+    sw_records = [r for r in records if r["software"] == software]
+    dept_ltc={}
+    for r in sw_records:
+        dept_record = r["dept"].strip()
+        if dept_record not in dept_ltc:
+            dept_ltc[dept_record]=0
+        dept_ltc[dept_record] +=safe_num(r["grand_ltc"])
+        individual_val=dept_ltc[dept_record]
+        print(individual_val)
+        npp_depts_found={
+            d:dept_ltc[d]
+            for d in NPP_dept
+            if d in dept_ltc
+        }
+        print(individual_val)
+        npp_value = sum(npp_depts_found.values())
+        
+    print(dept)
+    if software=="SMARTPLANT 3D":
+        if dept=="PP":
+            if "ORP" in value:
+                return 13
+            elif "ORP_UPI" in value:
+                return 2
+            else:
+                return None
+        
+        elif dept=="NPP":
+            return npp_value
+       
+        elif dept=="CV":
+            return dept_ltc[dept]
+        else:
+           
+            return None
+    if software=="CAESAR II":
+        if dept=="ME-S":
+            return None
+        elif dept=="NPP":
+            return npp_value
+        elif dept=="CV":
+            return dept_ltc[dept]
+        else:
+            return None 
+    if software=="PV-ELITE":
+        if dept=="PP":
+            return None
+        elif dept=="NPP":
+            return npp_value
+        elif dept=="CV":
+            return dept_ltc[dept]
+        else:
+            return None
+    else:
+        print("this is being run")
         return None
 
-    label_clean = label.strip().lower()
+def add_key(software: str, dept: str, key_id: str, active: bool = True) -> bool:
+    data     = load()
+    dept_key = dept.strip()
 
-    allocated_data = build_table2(
-        records       = records,
-        sw_agg        = sw_agg,
-        software_list = [software],
-        advent        = advent,
-        onshore       = onshore,
-    )
-    if software in allocated_data:
-        for row in allocated_data[software]["rows"]:
-            if row["label"].strip().lower() == label_clean:
-                return row["value"]
+    if software not in data:
+        data[software] = {}
+    if dept_key not in data[software]:
+        data[software][dept_key] = {}
 
-    required_data = build_table3(
-        records       = records,
-        sw_agg        = sw_agg,
-        software_list = [software],
-        annual        = annual,
-        advent        = advent,
-        onshore       = onshore,
-    )
-    if software in required_data:
-        for row in required_data[software]["rows"]:
-            if row["label"].strip().lower() == label_clean:
-                return row["value"]
+    dept_data = data[software][dept_key]  # ← reference, not reassign!
 
-    return None
+    if key_id in dept_data:
+        return False
 
-
-def get_all_label_options(
-    records:  list,
-    sw_agg:   dict,
-    software: str,
-    annual:   float = 0,
-    advent:   float = 0,
-    onshore:  float = 0,
-) -> list:
-    seen   = set()
-    labels = []
-
-    def add_label(name):
-        key = name.strip().lower()
-        if key not in seen:
-            seen.add(key)
-            labels.append(name.strip())
-
-    sw_records = [r for r in records if r["software"] == software]
-    for r in sw_records:
-        add_label(r["dept"])
-
-    allocated_data = build_table2(
-        records       = records,
-        sw_agg        = sw_agg,
-        software_list = [software],
-        advent        = advent,
-        onshore       = onshore,
-    )
-    if software in allocated_data:
-        for row in allocated_data[software]["rows"]:
-            add_label(row["label"])
-
-    required_data = build_table3(
-        records       = records,
-        sw_agg        = sw_agg,
-        software_list = [software],
-        annual        = annual,
-        advent        = advent,
-        onshore       = onshore,
-    )
-    if software in required_data:
-        for row in required_data[software]["rows"]:
-            add_label(row["label"])
-
-    return labels
-
-
-# ─────────────────────────────────────────────
-# TABLE 5 — Keystore
-# ─────────────────────────────────────────────
+    dept_data[key_id] = {"active": active}
+    save(data)
+    return True
 
 def build_table_keystore(
     records:       list,
     sw_agg:        dict,
     software_list: list,
-    annual:        float = 0,
-    advent:        float = 0,
-    onshore:       float = 0,
-    user_values:   dict  = {},  # ← add this
+    
 ) -> dict:
     from core.errors import SoftwareNotFoundError
-    from core.keystore import get_keys_with_status
 
     result = {}
 
@@ -438,45 +385,37 @@ def build_table_keystore(
         if sw not in sw_agg:
             raise SoftwareNotFoundError(sw)
 
-        all_labels = get_all_label_options(
-            records  = records,
-            sw_agg   = sw_agg,
-            software = sw,
-            annual   = annual,
-            advent   = advent,
-            onshore  = onshore,
-        )
+        # Get all unique depts for this software
+        sw_records = [r for r in records if r["software"] == sw]
+        all_depts  = list({r["dept"].strip() for r in sw_records})
+
+        # Add computed labels too
+        computed_labels = ["NPP", "CV", "PP", "Valdel", "CEC", "VEC"]
+        all_labels = list({*all_depts, *computed_labels})
 
         keys_list = []
 
         for label in all_labels:
-            status_map = get_keys_with_status(sw, label)
-            value      = get_value_for_label(
-                records  = records,
-                sw_agg   = sw_agg,
-                software = sw,
-                label    = label,
-                annual   = annual,
-                advent   = advent,
-                onshore  = onshore,
-            )
+            # Get keys for this software + label
+            status_map = keys_with_status(sw, label)
 
-            # If value is None → check user_values
-            if value is None:
-                value = user_values.get(sw, {}).get(label, {}).get(
-                    list(status_map.keys())[0] if status_map else "", None
-                )
+            if not status_map:
+                continue  # no keys defined for this label, skip
 
             for key_id, active in status_map.items():
-                # Per-key user value takes priority
-                key_user_val = user_values.get(sw, {}).get(label, {}).get(key_id)
-                final_value  = key_user_val if key_user_val is not None else value
+                # Use YOUR keystore_calculator for the value
+                value = keystore_calculator(
+                    records  = records,
+                    software = sw,
+                    dept     = label,
+                    value    = key_id,
+                )
 
                 keys_list.append({
                     "label":  label,
                     "key_id": key_id,
                     "active": active,
-                    "value":  final_value,
+                    "value":  value,  # None → frontend shows input box
                 })
 
         result[sw] = {

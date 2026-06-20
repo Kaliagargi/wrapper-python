@@ -46,6 +46,7 @@ async function buildTable() {
         session_id: sid,
         software:   software.join(','),
         annual:     inputs.annual,
+        advent:     inputs.advent,
     });
 
     const data = await apiFetch(`/tables/table1?${params}`);
@@ -67,7 +68,7 @@ async function buildTable() {
         own_lic:   r.own_lic,
         lease_lic: r.lease_lic,
         annual:    r.annual,
-        order:     r.order,
+        order:     r.order_lic,
     }));
 
     renderTable('tableContainer', headers, rows, true);
