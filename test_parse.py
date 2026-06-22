@@ -14,3 +14,5 @@ const sid = Session.get('session_id');
 fetch(`/tables/developer-list?session_id=${sid}`)
   .then(r => r.json())
   .then(d => console.log('API response:', JSON.stringify(d)));
+
+<div id="developerList" style="display:flex; flex-wrap:wrap; gap:8px; padding:4px;">
