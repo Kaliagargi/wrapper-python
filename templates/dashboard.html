@@ -10,36 +10,37 @@
 <!-- Developer Select -->
 <div class="card">
     <div class="card-title">👤 Select Developers</div>
-    <div id="developerList" class="multi-select">
-        <div style="padding:12px; color:#999; font-size:13px">Loading...</div>
+    <div id="developerList" 
+         style="display:flex; flex-wrap:wrap; gap:8px; padding:4px; min-height:48px;">
+        <div style="color:#9CA3AF; font-size:13px; padding:8px;">Loading...</div>
     </div>
 </div>
 
 <!-- Software + Inputs -->
 <div class="card">
     <div class="card-title">🖥️ Select Software & Set Inputs</div>
-    <p style="font-size:13px; color:var(--gray-500); margin-bottom:16px">
+    <p style="font-size:13px; color:#6B7280; margin-bottom:16px">
         Select software and fill in values. Advent only appears for SP3D.
     </p>
     <div id="softwareInputList">
-        <div style="padding:12px; color:#999; font-size:13px">
+        <div style="padding:12px; color:#9CA3AF; font-size:13px">
             Select developers first...
         </div>
     </div>
 </div>
 
 <!-- Save Button -->
-<div style="display:flex; gap:12px; align-items:center">
+<div style="display:flex; gap:12px; align-items:center; margin-top:8px;">
     <button class="btn btn-primary btn-lg" onclick="saveAndContinue()">
         💾 Save & Continue to Tables →
     </button>
-    <span id="saveStatus" style="font-size:13px; color:var(--gray-500)"></span>
+    <span id="saveStatus" style="font-size:13px; color:#6B7280"></span>
 </div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const SP3D_NAMES = ['sp3d', 'smartplant', 'smartplant 3d', 'sp3d '];
+const SP3D_NAMES = ['sp3d', 'smartplant', 'smartplant 3d'];
 
 let selectedDevelopers = [];
 let selectedSoftware   = [];
@@ -59,21 +60,39 @@ async function loadDevelopers() {
 
     const container = document.getElementById('developerList');
     container.innerHTML = data.data.map(dev => `
-        <div class="multi-select-item" onclick="toggleDeveloper('${dev}', this)">
-            <input type="checkbox" id="dev_${dev}"> ${dev}
+        <div id="devcard_${dev}"
+             onclick="toggleDeveloper('${dev}', this)"
+             style="display:inline-flex; align-items:center; gap:8px;
+                    padding:10px 18px; border-radius:8px;
+                    border:1.5px solid #E5E7EB;
+                    background:white;
+                    cursor:pointer; font-size:13px; font-weight:600;
+                    transition:all 0.15s;">
+            <input type="checkbox" id="dev_${dev}"
+                   style="width:15px; height:15px; accent-color:#2563EB"
+                   onclick="event.stopPropagation()">
+            👤 ${dev}
         </div>
     `).join('');
 }
 
 // ── Toggle Developer ──────────────────────
 async function toggleDeveloper(dev, el) {
-    el.classList.toggle('selected');
-    el.querySelector('input').checked = el.classList.contains('selected');
+    const checkbox     = document.getElementById(`dev_${dev}`);
+    const isNowSelected = !checkbox.checked;
 
-    if (el.classList.contains('selected')) {
+    checkbox.checked = isNowSelected;
+
+    if (isNowSelected) {
         if (!selectedDevelopers.includes(dev)) selectedDevelopers.push(dev);
+        el.style.borderColor = '#2563EB';
+        el.style.background  = '#EFF6FF';
+        el.style.color       = '#2563EB';
     } else {
-        selectedDevelopers = selectedDevelopers.filter(d => d !== dev);
+        selectedDevelopers   = selectedDevelopers.filter(d => d !== dev);
+        el.style.borderColor = '#E5E7EB';
+        el.style.background  = 'white';
+        el.style.color       = '#111827';
     }
 
     await loadSoftwareWithInputs();
@@ -83,7 +102,7 @@ async function toggleDeveloper(dev, el) {
 async function loadSoftwareWithInputs() {
     if (selectedDevelopers.length === 0) {
         document.getElementById('softwareInputList').innerHTML =
-            '<div style="padding:12px; color:#999; font-size:13px">Select developers first...</div>';
+            '<div style="padding:12px; color:#9CA3AF; font-size:13px">Select developers first...</div>';
         return;
     }
 
@@ -94,42 +113,47 @@ async function loadSoftwareWithInputs() {
     );
     if (!data?.success) return;
 
-    // Load previously saved inputs
-    const savedInputs    = getSavedInputs();
-    const prevSelected   = Session.get('software') || [];
+    const savedInputs  = getSavedInputs();
+    const prevSelected = Session.get('software') || [];
 
     const container = document.getElementById('softwareInputList');
     container.innerHTML = data.data.map(sw => {
         const swName     = sw.software;
         const isSelected = prevSelected.includes(swName);
-        const inputs     = savedInputs[swName] || {annual:0, advent:0, onshore:0};
+        const inputs     = savedInputs[swName] || {annual: 0, advent: 0, onshore: 0};
         const showAdvent = isSP3D(swName);
 
         return `
-        <div class="software-input-card ${isSelected ? 'selected' : ''}"
-             id="swcard_${swName}"
-             style="border:1.5px solid var(--gray-200); border-radius:var(--radius);
-                    padding:16px; margin-bottom:12px; transition: all 0.15s;">
+        <div id="swcard_${swName}"
+             style="border:1.5px solid ${isSelected ? '#2563EB' : '#E5E7EB'};
+                    border-radius:8px; padding:16px; margin-bottom:12px;
+                    background:${isSelected ? '#EFF6FF' : 'white'};
+                    transition:all 0.15s;">
 
-            <div style="display:flex; align-items:center; gap:12px; margin-bottom:${isSelected ? '16px' : '0'}">
+            <div style="display:flex; align-items:center; gap:12px;
+                        margin-bottom:${isSelected ? '16px' : '0'}">
                 <input type="checkbox" id="sw_${swName}"
                        ${isSelected ? 'checked' : ''}
                        onchange="toggleSoftware('${swName}', this)"
-                       style="width:16px; height:16px; accent-color:var(--accent)">
+                       style="width:16px; height:16px; accent-color:#2563EB; cursor:pointer;">
                 <label for="sw_${swName}"
-                       style="font-size:14px; font-weight:600; cursor:pointer; flex:1">
+                       style="font-size:14px; font-weight:600;
+                              cursor:pointer; flex:1; color:#111827;">
                     🖥️ ${swName}
-                    <span style="font-size:11px; color:var(--gray-400); font-weight:400; margin-left:4px">
+                    <span style="font-size:11px; color:#9CA3AF;
+                                 font-weight:400; margin-left:6px;">
                         ${sw.developer}
                     </span>
                 </label>
-                ${showAdvent ? '<span class="pill pill-blue" style="font-size:10px">SP3D</span>' : ''}
+                ${showAdvent
+                    ? '<span style="background:#EFF6FF; color:#2563EB; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px;">SP3D</span>'
+                    : ''}
             </div>
 
             <div id="inputs_${swName}"
                  style="display:${isSelected ? 'grid' : 'none'};
                         grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-                        gap:12px; margin-top:4px;">
+                        gap:12px;">
                 <div class="form-group" style="margin:0">
                     <label class="form-label">Annual</label>
                     <input type="number" class="form-control"
@@ -161,19 +185,22 @@ async function loadSoftwareWithInputs() {
 
 // ── Toggle Software ───────────────────────
 function toggleSoftware(sw, checkbox) {
-    const card   = document.getElementById(`swcard_${sw}`);
-    const inputs = document.getElementById(`inputs_${sw}`);
+    const card        = document.getElementById(`swcard_${sw}`);
+    const inputsDiv   = document.getElementById(`inputs_${sw}`);
+    const labelMargin = document.querySelector(`#swcard_${sw} > div`);
 
     if (checkbox.checked) {
         if (!selectedSoftware.includes(sw)) selectedSoftware.push(sw);
-        card.style.borderColor = 'var(--accent)';
-        card.style.background  = 'var(--accent-light)';
-        inputs.style.display   = 'grid';
+        card.style.borderColor     = '#2563EB';
+        card.style.background      = '#EFF6FF';
+        inputsDiv.style.display    = 'grid';
+        if (labelMargin) labelMargin.style.marginBottom = '16px';
     } else {
-        selectedSoftware = selectedSoftware.filter(s => s !== sw);
-        card.style.borderColor = 'var(--gray-200)';
-        card.style.background  = 'white';
-        inputs.style.display   = 'none';
+        selectedSoftware           = selectedSoftware.filter(s => s !== sw);
+        card.style.borderColor     = '#E5E7EB';
+        card.style.background      = 'white';
+        inputsDiv.style.display    = 'none';
+        if (labelMargin) labelMargin.style.marginBottom = '0';
     }
 
     Session.set('software', selectedSoftware);
@@ -186,8 +213,8 @@ function autoSaveInputs(sw) {
     const advent  = parseFloat(document.getElementById(`advent_${sw}`)?.value)  || 0;
     const onshore = parseFloat(document.getElementById(`onshore_${sw}`)?.value) || 0;
 
-    const allInputs      = getSavedInputs();
-    allInputs[sw]        = {annual, advent, onshore};
+    const allInputs = getSavedInputs();
+    allInputs[sw]   = {annual, advent, onshore};
     Session.set('inputs', allInputs);
 }
 
@@ -203,14 +230,12 @@ function saveAndContinue() {
         return;
     }
 
-    // Save all inputs for selected software
     selectedSoftware.forEach(sw => autoSaveInputs(sw));
-    Session.set('software', selectedSoftware);
-
-    // Default selected_for_tables to all selected
+    Session.set('software',            selectedSoftware);
     Session.set('selected_for_tables', selectedSoftware);
 
     updateNav();
+    document.getElementById('saveStatus').textContent = '✅ Saved!';
     toast('Saved! Redirecting to tables...', 'success');
     setTimeout(() => window.location.href = '/table1', 800);
 }
