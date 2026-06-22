@@ -9,3 +9,8 @@ for p in project_layout:
 print(f"\nTotal records: {len(records)}")
 print(f"\nSoftware found: {list(sw_agg.keys())}")
 print(f"\nSample record:\n{records[0]}")
+
+const sid = Session.get('session_id');
+fetch(`/tables/developer-list?session_id=${sid}`)
+  .then(r => r.json())
+  .then(d => console.log('API response:', JSON.stringify(d)));
