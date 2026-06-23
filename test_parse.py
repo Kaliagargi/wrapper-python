@@ -517,7 +517,7 @@ function saveKeystoreValues() {
     toast('Keystore values saved!', 'success');
 }
 
-// ─────────────────────────────────────────────
+ //─────────────────────────────────────────────
 // DOWNLOAD ALL
 // ─────────────────────────────────────────────
 
@@ -528,4 +528,69 @@ async function downloadAll() {
     const perSwInputs = {};
 
     software.forEach(sw => {
-        perSwInputs[sw] = allInputs[sw] || {annual:
+        perSwInputs[sw] = allInputs[sw] || {annual:0, advent:0, onshore:0};
+    });
+
+    const keystoreValues = JSON.parse(
+        sessionStorage.getItem('keystore_values_temp') || '{}'
+    );
+
+    if (!sid || software.length === 0) {
+        toast('Please generate tables first', 'error');
+        return;
+    }
+
+    showLoading('Generating Excel report...');
+
+    try {
+        const response = await fetch('/download/', {
+            method:  'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                session_id:      sid,
+                software:        software,
+                t1_software:     software,
+                t2_software:     software,
+                t3_software:     software,
+                t4_software:     software,
+                per_sw_inputs:   perSwInputs,
+                keystore_values: keystoreValues,
+            }),
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            toast(err.detail || 'Download failed', 'error');
+            hideLoading();
+            return;
+        }
+
+        const blob = await response.blob();
+        const url  = window.URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'licence_report.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        sessionStorage.removeItem('keystore_values_temp');
+        hideLoading();
+        toast('Download complete! ✅', 'success');
+
+    } catch(e) {
+        hideLoading();
+        toast('Download failed: ' + e.message, 'error');
+    }
+}
+
+// ─────────────────────────────────────────────
+// INIT
+// ─────────────────────────────────────────────
+
+document.addEventListener('DOMContentLoaded', () => {
+    loadDevelopers();
+    updateNav();
+});
+</script>
+{% endblock %}
