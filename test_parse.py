@@ -454,3 +454,25 @@ async function downloadAll() {
 }
 </script>
 {% endblock %}
+
+// Replace saveAndContinue() or generateAllTables() with:
+async function generateReport() {
+    if (selectedSoftware.length === 0) {
+        toast('Please select at least one software', 'error');
+        return;
+    }
+
+    // Save everything to sessionStorage
+    selectedSoftware.forEach(sw => autoSaveInputs(sw));
+    Session.set('software', selectedSoftware);
+    Session.set('selected_for_tables', selectedSoftware);
+
+    updateNav();
+    window.location.href = '/report';
+}
+@app.get("/report")
+def report_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="report.html"
+    )
