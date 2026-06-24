@@ -692,3 +692,53 @@ async function downloadAll() {
 }
 </script>
 {% endblock %}
+
+
+function saveInputsToCache(sw) {
+    if (!keystoreData[sw]) return;
+    document.querySelectorAll('[id^="kval_"]').forEach(inp => {
+        const parts = inp.id.replace('kval_', '').split('_');
+        const inputSw    = parts[0];
+        const label  = parts[1];
+        const keyId  = parts.slice(2).join('_');
+        if (inputSw !== sw) return;
+        // store value on the key object itself
+        if (!keystoreData[sw][label]) return;
+        if (!keystoreData[sw][label][keyId]) return;
+        keystoreData[sw][label][keyId]._cachedInput = inp.value;
+    });
+}
+
+
+// in your renderKeystoreInline, on the input field add value attribute
+value="${k._cachedInput ?? ''}"
+
+
+
+function saveKeystoreValues() {
+    // save current tab's DOM inputs into cache first
+    saveInputsToCache(activeSw);
+
+    const userValues = {};
+
+    // now read from cache across ALL software
+    Object.entries(keystoreData).forEach(([sw, swData]) => {
+        Object.entries(swData).forEach(([label, keys]) => {
+            Object.entries(keys).forEach(([keyId, keyObj]) => {
+                const val = keyObj._cachedInput;
+                if (!val || val === '') return;
+                if (!userValues[sw])          userValues[sw] = {};
+                if (!userValues[sw][label])   userValues[sw][label] = {};
+                userValues[sw][label][keyId]  = parseFloat(val) || 0;
+            });
+        });
+    });
+
+    sessionStorage.setItem('keystore_values_temp', JSON.stringify(userValues));
+}
+
+
+
+async function downloadAll() {
+    saveKeystoreValues(); // ← flushes all tabs into sessionStorage
+    // ... rest unchanged
