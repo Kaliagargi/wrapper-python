@@ -1,391 +1,265 @@
 {% extends "base.html" %}
-{% block title %}Dashboard — Licence Manager{% endblock %}
+{% block title %}Report — Licence Manager{% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h2>⚙️ Dashboard</h2>
-    <p>Select developers, software, set inputs and generate all tables.</p>
+    <h2>📋 Licence Report</h2>
+    <p>All tables computed per software.</p>
 </div>
 
-<!-- Developer Select -->
-<div class="card">
-    <div class="card-title">👤 Step 1 — Select Developers</div>
-    <div id="developerList"
-         style="display:flex; flex-wrap:wrap; gap:8px; padding:4px; min-height:48px;">
-        <div style="color:#9CA3AF; font-size:13px; padding:8px;">Loading...</div>
-    </div>
+<!-- Software Tabs -->
+<div style="display:flex; gap:4px; margin-bottom:24px; 
+            border-bottom:2px solid #E5E7EB; padding-bottom:0;">
+    <div id="swTabs" style="display:flex; gap:4px;"></div>
 </div>
 
-<!-- Software + Inputs -->
-<div class="card">
-    <div class="card-title">🖥️ Step 2 — Select Software & Set Inputs</div>
-    <p style="font-size:13px; color:#6B7280; margin-bottom:16px">
-        Select software and fill in values. Advent only appears for SP3D.
-    </p>
-    <div id="softwareInputList">
-        <div style="padding:12px; color:#9CA3AF; font-size:13px">
-            Select developers first...
-        </div>
-    </div>
-</div>
+<!-- Tab Content -->
+<div id="tabContent"></div>
 
-<!-- Generate Button -->
-<div style="display:flex; gap:12px; align-items:center; margin-top:8px;">
-    <button class="btn btn-primary btn-lg" onclick="generateAllTables()">
-        ⚡ Generate Tables
+<!-- Bottom Actions -->
+<div style="display:flex; gap:12px; margin-top:24px; flex-wrap:wrap;">
+    <button class="btn btn-navy" onclick="generateKeystore()">
+        🔑 Generate Keystore
     </button>
-    <span id="generateStatus" style="font-size:13px; color:#6B7280"></span>
+    <button class="btn btn-primary" onclick="downloadAll()">
+        ⬇️ Download All
+    </button>
+    <a href="/dashboard" class="btn btn-ghost">
+        ← Back to Dashboard
+    </a>
 </div>
 
-<!-- Tables Section -->
-<div id="tablesSection" style="display:none; margin-top:32px;">
+<!-- Keystore Section -->
+<div id="keystoreSection" style="margin-top:24px;"></div>
 
-    <!-- Table 1 -->
-    <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
-            <div class="card-title" style="margin:0">📊 Licence Summary</div>
-            <button class="btn btn-outline btn-sm" onclick="toggleEdit(this)"
-                    data-editing="false">✏️ Edit</button>
-        </div>
-        <div id="t1Container">
-            <div class="alert alert-info">Click Generate Tables to load.</div>
-        </div>
-    </div>
-
-    <!-- Table 2 -->
-    <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
-            <div class="card-title" style="margin:0">📋 Department Lease Distribution</div>
-            <button class="btn btn-outline btn-sm" onclick="toggleEdit(this)"
-                    data-editing="false">✏️ Edit</button>
-        </div>
-        <div id="t2Container">
-            <div class="alert alert-info">Click Generate Tables to load.</div>
-        </div>
-    </div>
-
-    <!-- Table 3 -->
-    <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
-            <div class="card-title" style="margin:0">🔢 Sub Location Breakups</div>
-            <button class="btn btn-outline btn-sm" onclick="toggleEdit(this)"
-                    data-editing="false">✏️ Edit</button>
-        </div>
-        <div id="t3Container">
-            <div class="alert alert-info">Click Generate Tables to load.</div>
-        </div>
-    </div>
-
-    <!-- Table 4 -->
-    <div class="card">
-        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
-            <div class="card-title" style="margin:0">🏦 ISL — Dept Wise Breakdown</div>
-            <button class="btn btn-outline btn-sm" onclick="toggleEdit(this)"
-                    data-editing="false">✏️ Edit</button>
-        </div>
-        <div id="t4Container">
-            <div class="alert alert-info">Click Generate Tables to load.</div>
-        </div>
-    </div>
-
-    <!-- Keystore + Download buttons -->
-    <div style="display:flex; gap:12px; margin-top:8px; flex-wrap:wrap;">
-        <button class="btn btn-navy" onclick="generateKeystore()">
-            🔑 Generate Keystore
-        </button>
-        <button class="btn btn-primary" onclick="downloadAll()">
-            ⬇️ Download All
-        </button>
-    </div>
-
-    <!-- Keystore Section -->
-    <div id="keystoreSection" style="margin-top:20px;"></div>
-
-</div>
 {% endblock %}
 
 {% block scripts %}
 <script>
-const SP3D_NAMES = ['sp3d', 'smartplant', 'smartplant 3d'];
-
-let selectedDevelopers = [];
-let selectedSoftware   = [];
+let activeSw      = null;
+let allTableData  = {};  // {sw: {t1, t2, t3, t4}}
 
 // ─────────────────────────────────────────────
-// HELPERS
+// INIT
 // ─────────────────────────────────────────────
 
-function isSP3D(sw) {
-    return SP3D_NAMES.some(n => sw.toLowerCase().includes(n));
-}
+document.addEventListener('DOMContentLoaded', async () => {
+    const software = getSoftware();
+    if (!software || software.length === 0) {
+        window.location.href = '/dashboard';
+        return;
+    }
 
-function getSavedInputs() {
-    return Session.get('inputs') || {};
-}
-
-function autoSaveInputs(sw) {
-    const annual  = parseFloat(document.getElementById(`annual_${sw}`)?.value)  || 0;
-    const advent  = parseFloat(document.getElementById(`advent_${sw}`)?.value)  || 0;
-    const onshore = parseFloat(document.getElementById(`onshore_${sw}`)?.value) || 0;
-    const all     = getSavedInputs();
-    all[sw]       = {annual, advent, onshore};
-    Session.set('inputs', all);
-}
+    renderTabs(software);
+    await loadAllData(software);
+    switchTab(software[0]);
+});
 
 // ─────────────────────────────────────────────
-// LOAD DEVELOPERS
+// RENDER TABS
 // ─────────────────────────────────────────────
 
-async function loadDevelopers() {
-    const sid = getSessionId();
-    if (!sid) { window.location.href = '/'; return; }
-
-    const data = await apiFetch(`/tables/developer-list?session_id=${sid}`);
-    if (!data?.success) return;
-
-    const container = document.getElementById('developerList');
-    container.innerHTML = data.data.map(dev => `
-        <div id="devcard_${dev}"
-             onclick="toggleDeveloper('${dev}', this)"
-             style="display:inline-flex; align-items:center; gap:8px;
-                    padding:10px 18px; border-radius:8px;
-                    border:1.5px solid #E5E7EB; background:white;
-                    cursor:pointer; font-size:13px; font-weight:600;
-                    transition:all 0.15s;">
-            <input type="checkbox" id="dev_${dev}"
-                   style="width:15px; height:15px; accent-color:#2563EB"
-                   onclick="event.stopPropagation()">
-            👤 ${dev}
-        </div>
+function renderTabs(software) {
+    const container = document.getElementById('swTabs');
+    container.innerHTML = software.map((sw, i) => `
+        <button id="tab_${sw}"
+                onclick="switchTab('${sw}')"
+                style="padding:10px 20px; border:none; cursor:pointer;
+                       font-size:13px; font-weight:600;
+                       background:${i === 0 ? 'white' : 'transparent'};
+                       color:${i === 0 ? '#2563EB' : '#6B7280'};
+                       border-bottom:${i === 0 ? '2px solid #2563EB' : '2px solid transparent'};
+                       margin-bottom:-2px; transition:all 0.15s;">
+            🖥️ ${sw}
+            <span id="tabstatus_${sw}"
+                  style="margin-left:6px; font-size:10px; 
+                         background:#E5E7EB; color:#6B7280;
+                         padding:2px 6px; border-radius:10px;">
+                Loading...
+            </span>
+        </button>
     `).join('');
 }
 
 // ─────────────────────────────────────────────
-// TOGGLE DEVELOPER
+// SWITCH TAB
 // ─────────────────────────────────────────────
 
-async function toggleDeveloper(dev, el) {
-    const checkbox      = document.getElementById(`dev_${dev}`);
-    const isNowSelected = !checkbox.checked;
-    checkbox.checked    = isNowSelected;
+function switchTab(sw) {
+    const software = getSoftware();
 
-    if (isNowSelected) {
-        if (!selectedDevelopers.includes(dev)) selectedDevelopers.push(dev);
-        el.style.borderColor = '#2563EB';
-        el.style.background  = '#EFF6FF';
-        el.style.color       = '#2563EB';
-    } else {
-        selectedDevelopers   = selectedDevelopers.filter(d => d !== dev);
-        el.style.borderColor = '#E5E7EB';
-        el.style.background  = 'white';
-        el.style.color       = '#111827';
-    }
+    // Update tab styles
+    software.forEach(s => {
+        const tab = document.getElementById(`tab_${s}`);
+        if (!tab) return;
+        const isActive = s === sw;
+        tab.style.color       = isActive ? '#2563EB' : '#6B7280';
+        tab.style.background  = isActive ? 'white'   : 'transparent';
+        tab.style.borderBottom = isActive
+            ? '2px solid #2563EB'
+            : '2px solid transparent';
+    });
 
-    await loadSoftwareWithInputs();
-}
+    activeSw = sw;
 
-// ─────────────────────────────────────────────
-// LOAD SOFTWARE WITH INPUTS
-// ─────────────────────────────────────────────
-
-async function loadSoftwareWithInputs() {
-    if (selectedDevelopers.length === 0) {
-        document.getElementById('softwareInputList').innerHTML =
-            '<div style="padding:12px; color:#9CA3AF; font-size:13px">Select developers first...</div>';
+    // Render content for this software
+    const data = allTableData[sw];
+    if (!data) {
+        document.getElementById('tabContent').innerHTML = `
+            <div class="alert alert-info">Loading data for ${sw}...</div>`;
         return;
     }
 
-    const sid  = getSessionId();
-    const devs = selectedDevelopers.join(',');
-    const data = await apiFetch(
-        `/tables/software-by-developer?session_id=${sid}&developers=${encodeURIComponent(devs)}`
-    );
-    if (!data?.success) return;
-
-    const savedInputs  = getSavedInputs();
-    const prevSelected = Session.get('software') || [];
-
-    const container = document.getElementById('softwareInputList');
-    container.innerHTML = data.data.map(sw => {
-        const swName     = sw.software;
-        const isSelected = prevSelected.includes(swName);
-        const inputs     = savedInputs[swName] || {annual:0, advent:0, onshore:0};
-        const showAdvent = isSP3D(swName);
-
-        return `
-        <div id="swcard_${swName}"
-             style="border:1.5px solid ${isSelected ? '#2563EB' : '#E5E7EB'};
-                    border-radius:8px; padding:16px; margin-bottom:12px;
-                    background:${isSelected ? '#EFF6FF' : 'white'};
-                    transition:all 0.15s;">
-            <div style="display:flex; align-items:center; gap:12px;
-                        margin-bottom:${isSelected ? '16px' : '0'}">
-                <input type="checkbox" id="sw_${swName}"
-                       ${isSelected ? 'checked' : ''}
-                       onchange="toggleSoftware('${swName}', this)"
-                       style="width:16px; height:16px; accent-color:#2563EB; cursor:pointer;">
-                <label for="sw_${swName}"
-                       style="font-size:14px; font-weight:600; cursor:pointer; flex:1; color:#111827;">
-                    🖥️ ${swName}
-                    <span style="font-size:11px; color:#9CA3AF; font-weight:400; margin-left:6px;">
-                        ${sw.developer}
-                    </span>
-                </label>
-                ${showAdvent
-                    ? '<span style="background:#EFF6FF; color:#2563EB; font-size:10px; font-weight:700; padding:2px 8px; border-radius:10px; border:1px solid #BFDBFE;">SP3D</span>'
-                    : ''}
-            </div>
-            <div id="inputs_${swName}"
-                 style="display:${isSelected ? 'grid' : 'none'};
-                        grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-                        gap:12px;">
-                <div class="form-group" style="margin:0">
-                    <label class="form-label">Annual</label>
-                    <input type="number" class="form-control"
-                           id="annual_${swName}" value="${inputs.annual}" min="0"
-                           oninput="autoSaveInputs('${swName}')">
-                </div>
-                ${showAdvent ? `
-                <div class="form-group" style="margin:0">
-                    <label class="form-label">Advent</label>
-                    <input type="number" class="form-control"
-                           id="advent_${swName}" value="${inputs.advent}" min="0"
-                           oninput="autoSaveInputs('${swName}')">
-                </div>` : ''}
-                <div class="form-group" style="margin:0">
-                    <label class="form-label">Onshore</label>
-                    <input type="number" class="form-control"
-                           id="onshore_${swName}" value="${inputs.onshore}" min="0"
-                           oninput="autoSaveInputs('${swName}')">
-                </div>
-            </div>
-        </div>`;
-    }).join('');
-
-    selectedSoftware = prevSelected;
+    renderTabContent(sw, data);
 }
 
 // ─────────────────────────────────────────────
-// TOGGLE SOFTWARE
+// LOAD ALL DATA
 // ─────────────────────────────────────────────
 
-function toggleSoftware(sw, checkbox) {
-    const card      = document.getElementById(`swcard_${sw}`);
-    const inputsDiv = document.getElementById(`inputs_${sw}`);
-    const labelDiv  = card.querySelector('div');
+async function loadAllData(software) {
+    const sid       = getSessionId();
+    const allInputs = Session.get('inputs') || {};
 
-    if (checkbox.checked) {
-        if (!selectedSoftware.includes(sw)) selectedSoftware.push(sw);
-        card.style.borderColor     = '#2563EB';
-        card.style.background      = '#EFF6FF';
-        inputsDiv.style.display    = 'grid';
-        if (labelDiv) labelDiv.style.marginBottom = '16px';
-    } else {
-        selectedSoftware           = selectedSoftware.filter(s => s !== sw);
-        card.style.borderColor     = '#E5E7EB';
-        card.style.background      = 'white';
-        inputsDiv.style.display    = 'none';
-        if (labelDiv) labelDiv.style.marginBottom = '0';
-    }
+    for (const sw of software) {
+        const inputs = allInputs[sw] || {annual:0, advent:0, onshore:0};
 
-    Session.set('software', selectedSoftware);
-    updateNav();
-}
-
-// ─────────────────────────────────────────────
-// GENERATE ALL TABLES
-// ─────────────────────────────────────────────
-
-async function generateAllTables() {
-    if (selectedSoftware.length === 0) {
-        toast('Please select at least one software', 'error');
-        return;
-    }
-
-    selectedSoftware.forEach(sw => autoSaveInputs(sw));
-    Session.set('software', selectedSoftware);
-
-    showLoading('Generating all tables...');
-
-    const sid  = getSessionId();
-    const allT1 = [];
-    const allT2 = {};
-    const allT3 = {};
-    const allT4 = {};
-
-    for (const sw of selectedSoftware) {
-        const inputs = getSavedInputs()[sw] || {annual:0, advent:0, onshore:0};
-
-        const p1 = new URLSearchParams({session_id:sid, software:sw, annual:inputs.annual, advent:inputs.advent});
+        // Table 1
+        const p1 = new URLSearchParams({
+            session_id: sid, software: sw, annual: inputs.annual, advent: inputs.advent
+        });
         const d1 = await apiFetch(`/tables/table1?${p1}`);
-        if (d1?.success) allT1.push(...d1.data);
 
-        const p2 = new URLSearchParams({session_id:sid, software:sw, advent:inputs.advent, onshore:inputs.onshore});
+        // Table 2
+        const p2 = new URLSearchParams({
+            session_id: sid, software: sw, advent: inputs.advent, onshore: inputs.onshore
+        });
         const d2 = await apiFetch(`/tables/table2?${p2}`);
-        if (d2?.success) Object.assign(allT2, d2.data);
 
-        const p3 = new URLSearchParams({session_id:sid, software:sw, annual:inputs.annual, advent:inputs.advent, onshore:inputs.onshore});
+        // Table 3
+        const p3 = new URLSearchParams({
+            session_id: sid, software: sw,
+            annual: inputs.annual, advent: inputs.advent, onshore: inputs.onshore
+        });
         const d3 = await apiFetch(`/tables/table3?${p3}`);
-        if (d3?.success) Object.assign(allT3, d3.data);
 
-        const p4 = new URLSearchParams({session_id:sid, software:sw});
+        // Table 4
+        const p4 = new URLSearchParams({session_id: sid, software: sw});
         const d4 = await apiFetch(`/tables/table4?${p4}`);
-        if (d4?.success) Object.assign(allT4, d4.data);
+
+        allTableData[sw] = {
+            t1: d1?.success ? d1.data : [],
+            t2: d2?.success ? d2.data : {},
+            t3: d3?.success ? d3.data : {},
+            t4: d4?.success ? d4.data : {},
+        };
+
+        // Update tab badge
+        const badge = document.getElementById(`tabstatus_${sw}`);
+        if (badge) {
+            badge.textContent    = '✅';
+            badge.style.background = '#ECFDF5';
+            badge.style.color      = '#059669';
+        }
     }
+}
 
-    hideLoading();
-    document.getElementById('tablesSection').style.display = 'block';
+// ─────────────────────────────────────────────
+// RENDER TAB CONTENT
+// ─────────────────────────────────────────────
 
-    // Render all tables
-    renderTable('t1Container',
+function renderTabContent(sw, data) {
+    const container = document.getElementById('tabContent');
+    container.innerHTML = `
+        <div id="t1_${sw}_wrap" class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+                <div class="card-title" style="margin:0">📊 Licence Summary</div>
+                <button class="btn btn-outline btn-sm"
+                        onclick="toggleEdit(this)" data-editing="false">✏️ Edit</button>
+            </div>
+            <div id="t1_${sw}"></div>
+        </div>
+
+        <div id="t2_${sw}_wrap" class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+                <div class="card-title" style="margin:0">📋 Department Lease Distribution</div>
+                <button class="btn btn-outline btn-sm"
+                        onclick="toggleEdit(this)" data-editing="false">✏️ Edit</button>
+            </div>
+            <div id="t2_${sw}"></div>
+        </div>
+
+        <div id="t3_${sw}_wrap" class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+                <div class="card-title" style="margin:0">🔢 Sub Location Breakups</div>
+                <button class="btn btn-outline btn-sm"
+                        onclick="toggleEdit(this)" data-editing="false">✏️ Edit</button>
+            </div>
+            <div id="t3_${sw}"></div>
+        </div>
+
+        <div id="t4_${sw}_wrap" class="card">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:16px">
+                <div class="card-title" style="margin:0">🏦 ISL — Dept Wise Breakdown</div>
+                <button class="btn btn-outline btn-sm"
+                        onclick="toggleEdit(this)" data-editing="false">✏️ Edit</button>
+            </div>
+            <div id="t4_${sw}"></div>
+        </div>
+    `;
+
+    // Render Table 1
+    renderTable(`t1_${sw}`,
         ['Developer', 'Software', 'Total Lic', 'Own Lic', 'Lease Lic', 'Annual', 'Advent', 'Order'],
-        allT1.map(r => ({
-            developer: r.developer, software: r.software,
-            total_lic: r.total_lic, own_lic:  r.own_lic,
-            lease_lic: r.lease_lic, annual:   r.annual,
-            advent:    r.advent,    order:    r.order_lic,
+        data.t1.map(r => ({
+            developer: r.developer, software:  r.software,
+            total_lic: r.total_lic, own_lic:   r.own_lic,
+            lease_lic: r.lease_lic, annual:    r.annual,
+            advent:    r.advent,    order:     r.order_lic,
         })), true
     );
 
+    // Render Table 2
     const t2rows = [];
-    Object.entries(allT2).forEach(([sw, d]) =>
+    Object.entries(data.t2).forEach(([s, d]) =>
         d.rows.forEach(r => t2rows.push({
-            software: sw, developer: d.developer,
-            category: r.label, description: r.description || '', value: r.value,
+            category:    r.label,
+            description: r.description || '',
+            value:       r.value,
         }))
     );
-    renderTable('t2Container',
-        ['Software', 'Developer', 'Category', 'Description', 'Value'],
+    renderTable(`t2_${sw}`,
+        ['Category', 'Description', 'Value'],
         t2rows, true
     );
 
+    // Render Table 3
     const t3rows = [];
-    Object.entries(allT3).forEach(([sw, d]) =>
+    Object.entries(data.t3).forEach(([s, d]) =>
         d.rows.forEach(r => t3rows.push({
-            software: sw, developer: d.developer,
-            category: r.label, value: r.value,
+            category: r.label,
+            value:    r.value,
         }))
     );
-    renderTable('t3Container',
-        ['Software', 'Developer', 'Category', 'Value'],
+    renderTable(`t3_${sw}`,
+        ['Category', 'Value'],
         t3rows, true
     );
 
+    // Render Table 4
     const t4rows = [];
-    Object.entries(allT4).forEach(([sw, d]) =>
+    Object.entries(data.t4).forEach(([s, d]) =>
         d.rows.forEach(r => t4rows.push({
-            software: sw, developer: d.developer,
-            dept: r.dept, ltm: r.ltm, share: r.share, total: r.total,
+            dept:  r.dept,
+            ltm:   r.ltm,
+            share: r.share,
+            total: r.total,
         }))
     );
-    renderTable('t4Container',
-        ['Software', 'Developer', 'Dept', 'LTM', 'Share', 'Total'],
+    renderTable(`t4_${sw}`,
+        ['Dept', 'LTM', 'Share', 'Total'],
         t4rows, true
     );
-
-    updateNav();
-    toast('All tables generated!', 'success');
-    document.getElementById('generateStatus').textContent = '✅ Generated!';
 }
 
 // ─────────────────────────────────────────────
@@ -393,11 +267,8 @@ async function generateAllTables() {
 // ─────────────────────────────────────────────
 
 async function generateKeystore() {
-    const sid = getSessionId();
-    if (!sid || selectedSoftware.length === 0) {
-        toast('Please generate tables first', 'error');
-        return;
-    }
+    const sid      = getSessionId();
+    const software = getSoftware();
 
     showLoading('Generating Keystore...');
 
@@ -406,7 +277,7 @@ async function generateKeystore() {
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({
             session_id:  sid,
-            software:    selectedSoftware,
+            software:    software,
             user_values: {},
         }),
     });
@@ -423,7 +294,7 @@ function renderKeystoreInline(keystoreData) {
 
     Object.entries(keystoreData).forEach(([sw, swData]) => {
         html += `
-        <h4 style="margin:16px 0 8px; color:#1A2B4A; font-size:14px;">
+        <h4 style="margin:16px 0 8px; color:#1A2B4A; font-size:14px; font-weight:700;">
             ${swData.developer} — ${sw}
         </h4>
         <div class="table-wrapper" style="margin-bottom:16px;">
@@ -441,7 +312,7 @@ function renderKeystoreInline(keystoreData) {
 
         swData.keys.forEach(k => {
             const valueDisplay = k.value !== null
-                ? `<span>${k.value}</span>`
+                ? `<span style="font-weight:600;">${k.value}</span>`
                 : `<input type="number" class="edit-cell"
                           placeholder="Enter value"
                           id="kval_${sw}_${k.label}_${k.key_id}"
@@ -450,19 +321,21 @@ function renderKeystoreInline(keystoreData) {
                                  background:#EFF6FF; font-size:13px;">`;
 
             const status = k.value === null
-                ? `<span style="color:#DC2626; font-weight:600; background:#FEF2F2;
-                                padding:3px 8px; border-radius:4px; font-size:11px;">
+                ? `<span style="color:#DC2626; font-weight:600;
+                                background:#FEF2F2; padding:3px 8px;
+                                border-radius:4px; font-size:11px;">
                     ⚠️ Needs Input
                    </span>`
-                : `<span style="color:#059669; font-weight:600; background:#ECFDF5;
-                                padding:3px 8px; border-radius:4px; font-size:11px;">
+                : `<span style="color:#059669; font-weight:600;
+                                background:#ECFDF5; padding:3px 8px;
+                                border-radius:4px; font-size:11px;">
                     ✅ OK
                    </span>`;
 
             html += `
-            <tr style="${k.value === null ? 'background:#FEF9F9;' : ''}">
+            <tr style="${k.value === null ? 'background:#FFF5F5;' : ''}">
                 <td>${k.label}</td>
-                <td style="font-family:monospace;">${k.key_id}</td>
+                <td style="font-family:monospace; font-size:12px;">${k.key_id}</td>
                 <td>
                     <label class="toggle">
                         <input type="checkbox" ${k.active ? 'checked' : ''}
@@ -479,14 +352,14 @@ function renderKeystoreInline(keystoreData) {
     });
 
     html += `
-    <div style="margin-top:16px; display:flex; gap:12px;">
+    <div style="margin-top:16px;">
         <button class="btn btn-navy btn-sm" onclick="saveKeystoreValues()">
-            💾 Save Keystore Values
+            💾 Save Input Values
         </button>
-    </div>
-    </div>`;
+    </div></div>`;
 
     document.getElementById('keystoreSection').innerHTML = html;
+    document.getElementById('keystoreSection').scrollIntoView({behavior:'smooth'});
 }
 
 async function toggleKeyInline(software, dept, keyId, checkbox) {
@@ -496,7 +369,8 @@ async function toggleKeyInline(software, dept, keyId, checkbox) {
         checkbox.checked = !checkbox.checked;
         toast('Failed to toggle key', 'error');
     } else {
-        toast(`${keyId} ${checkbox.checked ? 'activated' : 'deactivated'}`, 'success');
+        toast(`${keyId} ${checkbox.checked ? 'activated ✅' : 'deactivated'}`,
+              checkbox.checked ? 'success' : 'warn');
     }
 }
 
@@ -514,17 +388,17 @@ function saveKeystoreValues() {
         }
     });
     sessionStorage.setItem('keystore_values_temp', JSON.stringify(userValues));
-    toast('Keystore values saved!', 'success');
+    toast('Values saved!', 'success');
 }
 
- //─────────────────────────────────────────────
+// ─────────────────────────────────────────────
 // DOWNLOAD ALL
 // ─────────────────────────────────────────────
 
 async function downloadAll() {
     const sid         = getSessionId();
-    const software    = selectedSoftware;
-    const allInputs   = getSavedInputs();
+    const software    = getSoftware();
+    const allInputs   = Session.get('inputs') || {};
     const perSwInputs = {};
 
     software.forEach(sw => {
@@ -534,11 +408,6 @@ async function downloadAll() {
     const keystoreValues = JSON.parse(
         sessionStorage.getItem('keystore_values_temp') || '{}'
     );
-
-    if (!sid || software.length === 0) {
-        toast('Please generate tables first', 'error');
-        return;
-    }
 
     showLoading('Generating Excel report...');
 
@@ -583,14 +452,5 @@ async function downloadAll() {
         toast('Download failed: ' + e.message, 'error');
     }
 }
-
-// ─────────────────────────────────────────────
-// INIT
-// ─────────────────────────────────────────────
-
-document.addEventListener('DOMContentLoaded', () => {
-    loadDevelopers();
-    updateNav();
-});
 </script>
 {% endblock %}
