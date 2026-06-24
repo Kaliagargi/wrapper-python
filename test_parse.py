@@ -588,4 +588,107 @@ async function toggleKeyInline(sw, dept, keyId, checkbox) {
     const data = await apiFetch(
         `/keystore/keys/toggle?${params}`, {method:'POST'}
     );
-  
+    if (!data?.success) {
+        checkbox.checked = !checkbox.checked;
+        toast('Failed to toggle key', 'error');
+    } else {
+        toast(
+            `${keyId} ${checkbox.checked ? 'activated ✅' : 'deactivated'}`,
+            checkbox.checked ? 'success' : 'warn'
+        );
+        updateGlobalTotal(sw);
+    }
+}
+
+
+// ─────────────────────────────────────────────
+// SAVE KEYSTORE VALUES
+// ─────────────────────────────────────────────
+
+function saveKeystoreValues() {
+    const userValues = {};
+
+    document.querySelectorAll('[id^="kval_"]').forEach(inp => {
+        if (inp.value === '') return;
+        const parts  = inp.id.replace('kval_', '').split('_');
+        const sw     = parts[0];
+        const label  = parts[1];
+        const keyId  = parts.slice(2).join('_');
+        if (!userValues[sw])        userValues[sw] = {};
+        if (!userValues[sw][label]) userValues[sw][label] = {};
+        userValues[sw][label][keyId] = parseFloat(inp.value) || 0;
+    });
+
+    sessionStorage.setItem('keystore_values_temp', JSON.stringify(userValues));
+    toast('Keystore values saved!', 'success');
+}
+
+
+// ─────────────────────────────────────────────
+// DOWNLOAD ALL
+// ─────────────────────────────────────────────
+
+async function downloadAll() {
+    const sid         = getSessionId();
+    const software    = getSoftware();
+    const allInputs   = Session.get('inputs') || {};
+    const perSwInputs = {};
+
+    software.forEach(sw => {
+        perSwInputs[sw] = allInputs[sw] || {annual:0, advent:0, onshore:0};
+    });
+
+    const keystoreValues = JSON.parse(
+        sessionStorage.getItem('keystore_values_temp') || '{}'
+    );
+
+    if (!sid || software.length === 0) {
+        toast('Please go back to dashboard and select software', 'error');
+        return;
+    }
+
+    showLoading('Generating Excel report...');
+
+    try {
+        const response = await fetch('/download/', {
+            method:  'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                session_id:      sid,
+                software:        software,
+                t1_software:     software,
+                t2_software:     software,
+                t3_software:     software,
+                t4_software:     software,
+                per_sw_inputs:   perSwInputs,
+                keystore_values: keystoreValues,
+            }),
+        });
+
+        if (!response.ok) {
+            const err = await response.json();
+            toast(err.detail || 'Download failed', 'error');
+            hideLoading();
+            return;
+        }
+
+        const blob = await response.blob();
+        const url  = window.URL.createObjectURL(blob);
+        const a    = document.createElement('a');
+        a.href     = url;
+        a.download = 'licence_report.xlsx';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        window.URL.revokeObjectURL(url);
+        sessionStorage.removeItem('keystore_values_temp');
+        hideLoading();
+        toast('Download complete! ✅', 'success');
+
+    } catch(e) {
+        hideLoading();
+        toast('Download failed: ' + e.message, 'error');
+    }
+}
+</script>
+{% endblock %}
