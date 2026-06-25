@@ -16,11 +16,11 @@ def split_ltm_share(value:float) ->tuple:
     return ltm,share
 
 def get_developer_list(sw_agg: dict) ->list:
-    return[{
-        data["developer"]
-        for data in sw_agg.values()
-        if data["developer"]
-    }]
+   return list({
+    data["developer"]
+    for data in sw_agg.values()
+    if data["developer"]
+})
 
     
 def get_software_list(sw_agg: dict) ->list:

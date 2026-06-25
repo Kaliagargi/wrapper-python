@@ -30,8 +30,8 @@
 
 <!-- Save Button -->
 <div style="display:flex; gap:12px; align-items:center">
-    <button class="btn btn-primary btn-lg" onclick="saveAndContinue()">
-        💾 Save & Continue to Tables →
+    <button class="btn btn-primary btn-lg" onclick="generateReport()">
+        💾 generate report →
     </button>
     <span id="saveStatus" style="font-size:13px; color:var(--gray-500)"></span>
 </div>
@@ -197,24 +197,19 @@ function getSavedInputs() {
 }
 
 // ── Save & Continue ───────────────────────
-function saveAndContinue() {
+// Replace saveAndContinue() or generateAllTables() with:
+// Replace saveAndContinue/generateAllTables with:
+function generateReport() {
     if (selectedSoftware.length === 0) {
         toast('Please select at least one software', 'error');
         return;
     }
-
-    // Save all inputs for selected software
     selectedSoftware.forEach(sw => autoSaveInputs(sw));
     Session.set('software', selectedSoftware);
-
-    // Default selected_for_tables to all selected
-    Session.set('selected_for_tables', selectedSoftware);
-
     updateNav();
-    toast('Saved! Redirecting to tables...', 'success');
-    setTimeout(() => window.location.href = '/table1', 800);
-}
+    window.location.href = '/report';
 
+}
 // ── Init ──────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
     loadDevelopers();

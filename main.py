@@ -88,6 +88,12 @@ def download_page(request: Request):
         name="download.html"
     )
 
+@app.get("/report")
+def report_page(request: Request):
+    return templates.TemplateResponse(
+        request=request,
+        name="report.html"
+    )
 
 @app.get("/health")
 def health():
