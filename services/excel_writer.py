@@ -98,7 +98,7 @@ def get_or_create_sheet(wb, sheet_name):
 
 def write_sheet1(wb, table1_data: list):
     ws    = get_or_create_sheet(wb, "Licence Summary")
-    ncols = 7
+    ncols = 8          # Developer Software Total Own Lease Annual Advent Order
     row   = 1
 
     title_row(ws, row, "📊  Licence Summary", ncols)
@@ -106,7 +106,7 @@ def write_sheet1(wb, table1_data: list):
 
     for ci, h in enumerate(
         ["Developer", "Software", "Total Lic", "Own Lic",
-         "Lease Lic", "Annual", "Order"], 1
+         "Lease Lic", "Annual", "Advent", "Order"], 1
     ):
         hdr(ws, row, ci, h)
     row += 1
@@ -114,21 +114,22 @@ def write_sheet1(wb, table1_data: list):
     data_start = row
     for ri, d in enumerate(table1_data):
         alt = ri % 2 == 0
-        val(ws, row, 1, d["developer"], alt=alt, left=True)
-        val(ws, row, 2, d["software"],  alt=alt, left=True)
-        val(ws, row, 3, d["total_lic"], alt=alt)
-        val(ws, row, 4, d["own_lic"],   alt=alt)
-        val(ws, row, 5, d["lease_lic"], alt=alt)
-        val(ws, row, 6, d["annual"],    alt=alt)
-        val(ws, row, 7, d["order_lic"],     alt=alt)
+        val(ws, row, 1, d["developer"],           alt=alt, left=True)
+        val(ws, row, 2, d["software"],             alt=alt, left=True)
+        val(ws, row, 3, d["total_lic"],            alt=alt)
+        val(ws, row, 4, d["own_lic"],              alt=alt)
+        val(ws, row, 5, d["lease_lic"],            alt=alt)
+        val(ws, row, 6, d["annual"],               alt=alt)
+        val(ws, row, 7, d.get("advent", 0),        alt=alt)
+        val(ws, row, 8, d["order_lic"],            alt=alt)
         row += 1
 
     total_row(ws, row, "TOTAL", {
         ci: f"=SUM({get_column_letter(ci)}{data_start}:{get_column_letter(ci)}{row-1})"
-        for ci in range(3, 8)
+        for ci in range(3, 9)
     }, ncols)
 
-    for ci, w in zip("ABCDEFG", [16, 20, 12, 12, 12, 12, 12]):
+    for ci, w in zip("ABCDEFGH", [16, 20, 12, 12, 12, 12, 12, 12]):
         ws.column_dimensions[ci].width = w
     ws.freeze_panes = "A3"
 
