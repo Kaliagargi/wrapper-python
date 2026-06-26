@@ -4,13 +4,13 @@
 {% block content %}
 <div class="page-header">
     <h2>📋 Licence Report</h2>
-    <p>All tables computed per software. Keystore appears under each software's tables.</p>
+    <p>All tables computed per software. Keystore appears below each software's tables.</p>
 </div>
 
 <!-- Software Tabs -->
-<div style="display:flex; gap:4px; margin-bottom:24px;
-            border-bottom:2px solid #E5E7EB; padding-bottom:0;">
-    <div id="swTabs" style="display:flex; gap:4px;"></div>
+<div style="display:flex; gap:0; margin-bottom:24px;
+            border-bottom:2px solid #E5E7EB; overflow-x:auto;">
+    <div id="swTabs" style="display:flex; gap:0;"></div>
 </div>
 
 <!-- Tab Content -->
@@ -18,12 +18,8 @@
 
 <!-- Bottom Actions -->
 <div style="display:flex; gap:12px; margin-top:24px; flex-wrap:wrap;">
-    <button class="btn btn-primary" onclick="downloadAll()">
-        ⬇️ Download All
-    </button>
-    <a href="/dashboard" class="btn btn-ghost">
-        ← Back to Dashboard
-    </a>
+    <button class="btn btn-primary" onclick="downloadAll()">⬇️ Download All</button>
+    <a href="/dashboard" class="btn btn-ghost">← Back to Dashboard</a>
 </div>
 {% endblock %}
 
@@ -33,9 +29,14 @@ let activeSw         = null;
 let allTableData     = {};   // {sw: {t1, t2, t3, t4}}
 let keystoreRegistry = {};   // {sw: {developer, keys:[...]}}
 
-// ─────────────────────────────────────────────
-// INIT
-// ─────────────────────────────────────────────
+// ─── safe DOM-ID helper (spaces / special chars → underscores) ────────────
+// ALWAYS use safeid(sw) in id="..." and querySelector, never bare sw.
+// Keep bare sw for API calls and data attributes.
+function safeid(sw) {
+    return sw.replace(/[^a-zA-Z0-9]/g, '_');
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────
 
 document.addEventListener('DOMContentLoaded', async () => {
     const software = getSoftware();
@@ -43,86 +44,78 @@ document.addEventListener('DOMContentLoaded', async () => {
         window.location.href = '/dashboard';
         return;
     }
-
     renderTabs(software);
     await loadAllData(software);
     await loadKeystore(software);
     switchTab(software[0]);
 });
 
-// ─────────────────────────────────────────────
-// RENDER TABS
-// ─────────────────────────────────────────────
+// ─── RENDER TABS ──────────────────────────────────────────────────────────
 
 function renderTabs(software) {
     const container = document.getElementById('swTabs');
     container.innerHTML = software.map((sw, i) => `
-        <button id="tab_${sw}"
-                onclick="switchTab('${sw}')"
-                style="padding:10px 20px; border:none; cursor:pointer;
-                       font-size:13px; font-weight:600;
-                       background:${i === 0 ? 'white' : 'transparent'};
-                       color:${i === 0 ? '#2563EB' : '#6B7280'};
-                       border-bottom:${i === 0 ? '2px solid #2563EB' : '2px solid transparent'};
-                       margin-bottom:-2px; transition:all 0.15s;">
+        <button id="tab_${safeid(sw)}"
+                onclick="switchTab('${sw.replace(/'/g,"\\'")}')}"
+                onclick="switchTab_btn(this, '${sw.replace(/'/g,"\\'")}')"
+                style="padding:10px 24px; border:none; cursor:pointer;
+                       font-size:13px; font-weight:600; white-space:nowrap;
+                       background:${i===0 ? 'white' : 'transparent'};
+                       color:${i===0 ? '#2563EB' : '#6B7280'};
+                       border-bottom:${i===0 ? '2px solid #2563EB' : '2px solid transparent'};
+                       margin-bottom:-2px; transition:all 0.15s;"
+                data-sw="${sw}">
             🖥️ ${sw}
-            <span id="tabstatus_${sw}"
+            <span id="tabstatus_${safeid(sw)}"
                   style="margin-left:6px; font-size:10px;
                          background:#E5E7EB; color:#6B7280;
-                         padding:2px 6px; border-radius:10px;">
-                Loading...
-            </span>
+                         padding:2px 6px; border-radius:10px;">⏳</span>
         </button>
     `).join('');
+    // fix onclick: delegate to data attribute to avoid quoting nightmares
+    document.querySelectorAll('#swTabs button[data-sw]').forEach(btn => {
+        btn.onclick = () => switchTab(btn.dataset.sw);
+    });
 }
 
-// ─────────────────────────────────────────────
-// SWITCH TAB
-// ─────────────────────────────────────────────
+// ─── SWITCH TAB ───────────────────────────────────────────────────────────
 
 function switchTab(sw) {
-    const software = getSoftware();
-    software.forEach(s => {
-        const tab = document.getElementById(`tab_${s}`);
-        if (!tab) return;
-        const isActive = s === sw;
-        tab.style.color        = isActive ? '#2563EB' : '#6B7280';
-        tab.style.background   = isActive ? 'white'   : 'transparent';
-        tab.style.borderBottom = isActive ? '2px solid #2563EB' : '2px solid transparent';
+    document.querySelectorAll('#swTabs button[data-sw]').forEach(btn => {
+        const isActive = btn.dataset.sw === sw;
+        btn.style.color        = isActive ? '#2563EB' : '#6B7280';
+        btn.style.background   = isActive ? 'white'   : 'transparent';
+        btn.style.borderBottom = isActive ? '2px solid #2563EB' : '2px solid transparent';
     });
-
     activeSw = sw;
-
     const data = allTableData[sw];
     if (!data) {
-        document.getElementById('tabContent').innerHTML = `
-            <div class="alert alert-info">Loading data for ${sw}...</div>`;
+        document.getElementById('tabContent').innerHTML =
+            `<div class="alert alert-info">Loading data for ${sw}…</div>`;
         return;
     }
     renderTabContent(sw, data);
 }
 
-// ─────────────────────────────────────────────
-// LOAD ALL TABLE DATA
-// ─────────────────────────────────────────────
+// ─── LOAD ALL TABLE DATA ─────────────────────────────────────────────────
 
 async function loadAllData(software) {
     const sid       = getSessionId();
     const allInputs = Session.get('inputs') || {};
 
     for (const sw of software) {
-        const inputs = allInputs[sw] || {annual:0, advent:0, onshore:0};
+        const inp = allInputs[sw] || {annual:0, advent:0, onshore:0};
 
-        const p1 = new URLSearchParams({session_id: sid, software: sw, annual: inputs.annual, advent: inputs.advent});
+        const p1 = new URLSearchParams({session_id:sid, software:sw, annual:inp.annual, advent:inp.advent});
         const d1 = await apiFetch(`/tables/table1?${p1}`);
 
-        const p2 = new URLSearchParams({session_id: sid, software: sw, advent: inputs.advent, onshore: inputs.onshore});
+        const p2 = new URLSearchParams({session_id:sid, software:sw, advent:inp.advent, onshore:inp.onshore});
         const d2 = await apiFetch(`/tables/table2?${p2}`);
 
-        const p3 = new URLSearchParams({session_id: sid, software: sw, annual: inputs.annual, advent: inputs.advent, onshore: inputs.onshore});
+        const p3 = new URLSearchParams({session_id:sid, software:sw, annual:inp.annual, advent:inp.advent, onshore:inp.onshore});
         const d3 = await apiFetch(`/tables/table3?${p3}`);
 
-        const p4 = new URLSearchParams({session_id: sid, software: sw});
+        const p4 = new URLSearchParams({session_id:sid, software:sw});
         const d4 = await apiFetch(`/tables/table4?${p4}`);
 
         allTableData[sw] = {
@@ -132,212 +125,215 @@ async function loadAllData(software) {
             t4: d4?.success ? d4.data : {},
         };
 
-        const badge = document.getElementById(`tabstatus_${sw}`);
+        const badge = document.getElementById(`tabstatus_${safeid(sw)}`);
         if (badge) {
             badge.textContent      = '✅';
-            badge.style.background  = '#ECFDF5';
-            badge.style.color       = '#059669';
+            badge.style.background = '#ECFDF5';
+            badge.style.color      = '#059669';
         }
     }
 }
 
-// ─────────────────────────────────────────────
-// LOAD KEYSTORE REGISTRY (GET — correct method)
-// ─────────────────────────────────────────────
+// ─── LOAD KEYSTORE REGISTRY (GET) ────────────────────────────────────────
 
 async function loadKeystore(software) {
-    const sid = getSessionId();
-    const params = new URLSearchParams({session_id: sid, software: software.join(',')});
+    const sid    = getSessionId();
+    const params = new URLSearchParams({session_id:sid, software:software.join(',')});
     const data   = await apiFetch(`/keystore/table?${params}`);
     keystoreRegistry = (data?.success ? data.data : {}) || {};
 }
 
-// ─────────────────────────────────────────────
-// RENDER TAB CONTENT (tables + keystore for this sw)
-// ─────────────────────────────────────────────
+// ─── RENDER TAB CONTENT ───────────────────────────────────────────────────
 
 function renderTabContent(sw, data) {
+    const sid = safeid(sw);
     const container = document.getElementById('tabContent');
     container.innerHTML = `
-        <div id="t1_${sw}_wrap" class="card">
+        <div class="card">
             <div class="card-title" style="margin:0 0 16px">📊 Licence Summary</div>
-            <div id="t1_${sw}"></div>
+            <div id="t1_${sid}"></div>
         </div>
-        <div id="t2_${sw}_wrap" class="card">
+        <div class="card">
             <div class="card-title" style="margin:0 0 16px">📋 Department Lease Distribution</div>
-            <div id="t2_${sw}"></div>
+            <div id="t2_${sid}"></div>
         </div>
-        <div id="t3_${sw}_wrap" class="card">
+        <div class="card">
             <div class="card-title" style="margin:0 0 16px">🔢 Sub Location Breakups</div>
-            <div id="t3_${sw}"></div>
+            <div id="t3_${sid}"></div>
         </div>
-        <div id="t4_${sw}_wrap" class="card">
+        <div class="card">
             <div class="card-title" style="margin:0 0 16px">🏦 ISL — Dept Wise Breakdown</div>
-            <div id="t4_${sw}"></div>
+            <div id="t4_${sid}"></div>
         </div>
-        <div id="keystore_${sw}_wrap"></div>
+        <div id="ks_${sid}_wrap"></div>
     `;
 
-    // Table 1
-    renderTable(`t1_${sw}`,
-        ['Developer', 'Software', 'Total Lic', 'Own Lic', 'Lease Lic', 'Annual', 'Advent', 'Order'],
+    renderTable(`t1_${sid}`,
+        ['Developer','Software','Total Lic','Own Lic','Lease Lic','Annual','Advent','Order'],
         data.t1.map(r => ({
-            developer: r.developer, software: r.software,
-            total_lic: r.total_lic, own_lic: r.own_lic,
-            lease_lic: r.lease_lic, annual: r.annual,
-            advent: r.advent, order: r.order_lic,
+            developer:r.developer, software:r.software,
+            total_lic:r.total_lic, own_lic:r.own_lic,
+            lease_lic:r.lease_lic, annual:r.annual,
+            advent:r.advent, order:r.order_lic,
         }))
     );
 
-    // Table 2
     const t2rows = [];
-    Object.entries(data.t2).forEach(([s, d]) =>
-        d.rows.forEach(r => t2rows.push({category: r.label, description: r.description || '', value: r.value}))
-    );
-    renderTable(`t2_${sw}`, ['Category', 'Description', 'Value'], t2rows);
+    Object.values(data.t2).forEach(d => d.rows.forEach(r =>
+        t2rows.push({category:r.label, description:r.description||'', value:r.value})
+    ));
+    renderTable(`t2_${sid}`, ['Category','Description','Value'], t2rows);
 
-    // Table 3
     const t3rows = [];
-    Object.entries(data.t3).forEach(([s, d]) =>
-        d.rows.forEach(r => t3rows.push({category: r.label, value: r.value}))
-    );
-    renderTable(`t3_${sw}`, ['Category', 'Value'], t3rows);
+    Object.values(data.t3).forEach(d => d.rows.forEach(r =>
+        t3rows.push({category:r.label, value:r.value})
+    ));
+    renderTable(`t3_${sid}`, ['Category','Value'], t3rows);
 
-    // Table 4
     const t4rows = [];
-    Object.entries(data.t4).forEach(([s, d]) =>
-        d.rows.forEach(r => t4rows.push({dept: r.dept, ltm: r.ltm, share: r.share, total: r.total}))
-    );
-    renderTable(`t4_${sw}`, ['Dept', 'LTM', 'Share', 'Total'], t4rows);
+    Object.values(data.t4).forEach(d => d.rows.forEach(r =>
+        t4rows.push({dept:r.dept, ltm:r.ltm, share:r.share, total:r.total})
+    ));
+    renderTable(`t4_${sid}`, ['Dept','LTM','Share','Total'], t4rows);
 
-    // Keystore for this software
     renderKeystoreForTab(sw);
 }
 
-// ─────────────────────────────────────────────
-// DERIVE LABEL → AVAILABLE VALUE  (from this sw's tables)
-// ─────────────────────────────────────────────
+// ─── DERIVE LABEL → AVAILABLE VALUE (from this sw's already-loaded tables)
+// Matches on UPPER-CASE label; table rows use their own casing.
 
 function deriveAvailable(sw) {
     const data  = allTableData[sw] || {};
     const avail = {};
     const put = (label, v) => {
-        if (label === undefined || label === null) return;
-        if (typeof v === 'number' && !isNaN(v)) avail[String(label).toUpperCase()] = v;
+        if (label == null) return;
+        const n = Number(v);
+        if (!isNaN(n)) avail[String(label).toUpperCase()] = n;
     };
 
-    // Licence Summary (t1)
+    // Licence Summary → Order, Advent, Annual
     const r1 = (data.t1 || []).find(r => r.software === sw) || (data.t1 || [])[0];
-    if (r1) {
-        put('ORDER',  r1.order_lic);
-        put('ADVENT', r1.advent);
-        put('ANNUAL', r1.annual);
-        put('LEASE',  r1.lease_lic);
-        put('OWN',    r1.own_lic);
-    }
-    // Required (t3) first…
-    const d3 = (data.t3 || {})[sw];
-    if (d3) d3.rows.forEach(r => put(r.label, r.value));
-    // …then Allocated (t2) wins on overlap (e.g. PP), matching existing behaviour
-    const d2 = (data.t2 || {})[sw];
-    if (d2) d2.rows.forEach(r => put(r.label, r.value));
+    if (r1) { put('ORDER', r1.order_lic); put('ADVENT', r1.advent); put('ANNUAL', r1.annual); }
 
-    return avail;
+    // Required (t3) — Valdel, PP, CEC, VEC, Onshore …
+    Object.values(data.t3 || {}).forEach(d => d.rows.forEach(r => put(r.label, r.value)));
+
+    // Allocated (t2) — NPP, PP, CV, Advent, Onshore … (overwrites t3 on overlap intentionally)
+    Object.values(data.t2 || {}).forEach(d => d.rows.forEach(r => put(r.label, r.value)));
+
+    return avail;   // keys are UPPER-CASE
 }
 
 function getOrder(sw) {
-    const r1 = (allTableData[sw]?.t1 || []).find(r => r.software === sw) || (allTableData[sw]?.t1 || [])[0];
-    return r1 ? Number(r1.order_lic) || 0 : 0;
+    const r1 = (allTableData[sw]?.t1 || []).find(r => r.software === sw)
+             || (allTableData[sw]?.t1 || [])[0];
+    return r1 ? (Number(r1.order_lic) || 0) : 0;
 }
 
-// id helpers — use ~~ separator so labels/keys with underscores are safe
-function kvalId(sw, label, keyId) { return `kval_${sw}~~${label}~~${keyId}`; }
+// ─── KEYSTORE INPUT ID ────────────────────────────────────────────────────
+// Use ~~ as separator; sw goes through safeid() so no spaces in the id.
 
-// ─────────────────────────────────────────────
-// RENDER KEYSTORE (per software, grouped by label, all editable)
-// ─────────────────────────────────────────────
+function kvalId(sw, label, keyId) {
+    return `kval_${safeid(sw)}~~${label}~~${keyId}`;
+}
+
+// ─── RENDER KEYSTORE FOR ONE TAB ─────────────────────────────────────────
 
 function renderKeystoreForTab(sw) {
-    const wrap = document.getElementById(`keystore_${sw}_wrap`);
+    const sid   = safeid(sw);
+    const wrap  = document.getElementById(`ks_${sid}_wrap`);
     if (!wrap) return;
 
-    const reg   = keystoreRegistry[sw];
-    const avail = deriveAvailable(sw);
-    const saved = JSON.parse(sessionStorage.getItem('keystore_values_temp') || '{}');
+    const reg    = keystoreRegistry[sw];
+    const avail  = deriveAvailable(sw);
+    const saved  = JSON.parse(sessionStorage.getItem('keystore_values_temp') || '{}');
     const savedSw = saved[sw] || {};
 
-    // Group keys by label
+    // Group registry keys by label
     const groups = {};
     (reg?.keys || []).forEach(k => {
         (groups[k.label] = groups[k.label] || []).push(k);
     });
 
-    // Build datalist of labels (table-derived + existing registry) for Add Key
+    // Datalist: merge table labels + registry labels + known set
+    const knownLabels = ['PP','NPP','CV','CEC','VEC','VALDEL','ADVENT','ONSHORE','ORDER'];
     const labelOptions = Array.from(new Set([
         ...Object.keys(avail),
         ...Object.keys(groups),
-        'PP','NPP','CV','CEC','VEC','VALDEL','ADVENT','ONSHORE',
+        ...knownLabels,
     ]));
 
     let html = `
-    <div class="card" id="keystoreCard_${sw}">
+    <div class="card" id="kscard_${sid}">
         <div class="card-title" style="margin:0 0 4px">🔑 Keystore — ${sw}</div>
-        <p style="margin:0 0 16px; font-size:12px; color:#6B7280;">
-            Values shown as <b>Available</b> come from the tables above. Every key value is editable.
-        </p>`;
+        <p style="margin:0 0 4px; font-size:12px; color:#6B7280;">
+            <b>Available</b> values are pulled from the tables above.
+            Every value is editable. Red = exceeds limit.
+        </p>
+        <div id="ksval_${sid}"
+             style="font-size:12px; font-weight:600; margin-bottom:14px;"></div>`;
 
-    if (!reg || (reg.keys || []).length === 0) {
-        html += `<div class="alert alert-info">No keys defined yet. Add one below.</div>`;
+    if (!reg || Object.keys(groups).length === 0) {
+        html += `<div class="alert alert-info" style="margin-bottom:12px;">No keys defined yet — add one below.</div>`;
     } else {
         Object.entries(groups).forEach(([label, keys]) => {
-            const availVal = avail[label.toUpperCase()];
-            const availTxt = (availVal === undefined)
+            const key_upper = label.toUpperCase();
+            const availVal  = avail[key_upper];
+            const availTxt  = availVal === undefined
                 ? '<span style="color:#9CA3AF;">— (not in tables)</span>'
                 : `<b>${availVal}</b>`;
             const single = keys.length === 1;
 
             html += `
-            <div class="ks-group" data-sw="${sw}" data-label="${label}"
+            <div class="ks-group"
+                 data-sw="${sw}" data-label="${label}"
                  data-avail="${availVal === undefined ? '' : availVal}"
-                 style="border:1px solid #E5E7EB; border-radius:8px; padding:12px 14px; margin-bottom:12px;">
+                 style="border:1.5px solid #E5E7EB; border-radius:8px;
+                        padding:12px 14px; margin-bottom:12px; transition:border-color 0.15s, background 0.15s;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
-                    <div style="font-weight:700; color:#1A2B4A; font-size:14px;">${label}</div>
+                    <div style="font-weight:700; color:#1A2B4A;">${label}</div>
                     <div style="font-size:12px; color:#374151;">
-                        Available (from tables): ${availTxt}
-                        <span class="ks-group-sum" style="margin-left:10px; color:#6B7280;"></span>
+                        Available: ${availTxt}
+                        <span class="ks-grp-sum" style="margin-left:10px; color:#6B7280;"></span>
                     </div>
                 </div>
-                <table style="width:100%;"><thead><tr>
-                    <th style="text-align:left;">Key ID</th>
-                    <th style="width:90px;">Active</th>
-                    <th style="width:140px;">Value</th>
-                </tr></thead><tbody>`;
+                <table style="width:100%; font-size:13px;">
+                    <thead><tr>
+                        <th style="text-align:left; font-weight:600; padding:4px 0;">Key ID</th>
+                        <th style="width:80px; text-align:center; font-weight:600;">Active</th>
+                        <th style="width:150px; font-weight:600;">Value</th>
+                    </tr></thead>
+                    <tbody>`;
 
             keys.forEach(k => {
+                // pre-fill: saved value → single-key label available → blank
                 let preset = '';
-                if (savedSw[label] && savedSw[label][k.key_id] !== undefined) {
+                if (savedSw[label]?.[k.key_id] !== undefined) {
                     preset = savedSw[label][k.key_id];
                 } else if (single && availVal !== undefined) {
                     preset = availVal;
                 }
                 html += `
                 <tr>
-                    <td style="font-family:monospace; font-size:12px;">${k.key_id}</td>
+                    <td style="font-family:monospace; padding:4px 0;">${k.key_id}</td>
                     <td style="text-align:center;">
                         <label class="toggle">
                             <input type="checkbox" ${k.active ? 'checked' : ''}
-                                   onchange="toggleKeyInline('${sw}','${label}','${k.key_id}',this)">
+                                   data-sw="${sw}" data-label="${label}" data-kid="${k.key_id}"
+                                   onchange="toggleKeyInline(this)">
                             <span class="toggle-slider"></span>
                         </label>
                     </td>
                     <td>
-                        <input type="number" step="any" class="edit-cell ks-val"
+                        <input type="number" step="any" class="ks-val"
                                id="${kvalId(sw, label, k.key_id)}"
                                data-sw="${sw}" data-label="${label}"
-                               value="${preset}" placeholder="${availVal !== undefined ? availVal : 'value'}"
+                               value="${preset}"
+                               placeholder="${availVal !== undefined ? availVal : 'value'}"
                                oninput="recomputeKeystore('${sw}')"
-                               style="width:120px; padding:4px 8px; border:1px solid #2563EB;
-                                      border-radius:4px; background:#EFF6FF; font-size:13px;">
+                               style="width:120px; padding:4px 8px;
+                                      border:1.5px solid #2563EB; border-radius:4px;
+                                      background:#EFF6FF; font-size:13px;">
                     </td>
                 </tr>`;
             });
@@ -346,28 +342,28 @@ function renderKeystoreForTab(sw) {
         });
     }
 
-    // Validation summary + Add Key + Save
+    // Add-key row + Save button
     html += `
-        <div id="ksValidation_${sw}"
-             style="margin:8px 0 16px; font-size:13px; font-weight:600;"></div>
-
         <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;
                     border-top:1px solid #E5E7EB; padding-top:14px; margin-top:4px;">
             <div>
                 <label style="display:block; font-size:11px; color:#6B7280; margin-bottom:3px;">Label / Dept</label>
-                <input list="ksLabels_${sw}" id="addLabel_${sw}" placeholder="e.g. PP"
+                <input list="ksll_${sid}" id="addLabel_${sid}" placeholder="e.g. PP"
                        style="width:130px; padding:6px 8px; border:1px solid #D1D5DB; border-radius:4px; font-size:13px;">
-                <datalist id="ksLabels_${sw}">
+                <datalist id="ksll_${sid}">
                     ${labelOptions.map(l => `<option value="${l}">`).join('')}
                 </datalist>
             </div>
             <div>
-                <label style="display:block; font-size:11px; color:#6B7280; margin-bottom:3px;">New Key ID</label>
-                <input id="addKeyId_${sw}" placeholder="e.g. KEY_010"
+                <label style="display:block; font-size:11px; color:#6B7280; margin-bottom:3px;">Key ID</label>
+                <input id="addKeyId_${sid}" placeholder="e.g. KEY_010"
                        style="width:150px; padding:6px 8px; border:1px solid #D1D5DB; border-radius:4px; font-size:13px;">
             </div>
-            <button class="btn btn-outline btn-sm" onclick="addKeyInline('${sw}')">➕ Add Key</button>
-            <button class="btn btn-navy btn-sm" onclick="saveKeystoreValues()" style="margin-left:auto;">💾 Save Values</button>
+            <button class="btn btn-outline btn-sm"
+                    onclick="addKeyInline('${sw}')">➕ Add Key</button>
+            <button class="btn btn-navy btn-sm"
+                    onclick="saveKeystoreValues()"
+                    style="margin-left:auto;">💾 Save Values</button>
         </div>
     </div>`;
 
@@ -375,99 +371,102 @@ function renderKeystoreForTab(sw) {
     recomputeKeystore(sw);
 }
 
-// ─────────────────────────────────────────────
-// LIVE VALIDATION
-//   • per-label: sum of keys ≤ Available
-//   • global:    sum of all keys ≤ Order
-// ─────────────────────────────────────────────
+// ─── LIVE VALIDATION ──────────────────────────────────────────────────────
+// Returns true = all OK, false = something exceeded.
+// Inline red highlighting happens always; toast only on explicit save/download.
 
-function recomputeKeystore(sw) {
+function recomputeKeystore(sw, toastOnFail) {
+    const sid      = safeid(sw);
+    const order    = getOrder(sw);
     let grandTotal = 0;
     let anyOver    = false;
 
-    document.querySelectorAll(`#keystoreCard_${sw} .ks-group`).forEach(group => {
+    document.querySelectorAll(`#kscard_${sid} .ks-group`).forEach(group => {
         const availRaw = group.dataset.avail;
         const avail    = availRaw === '' ? null : Number(availRaw);
         let sum = 0;
         group.querySelectorAll('.ks-val').forEach(inp => { sum += Number(inp.value) || 0; });
         grandTotal += sum;
 
-        const over = (avail !== null) && (sum > avail + 1e-9);
+        const over = avail !== null && sum > avail + 1e-9;
         if (over) anyOver = true;
 
         group.style.borderColor = over ? '#DC2626' : '#E5E7EB';
-        group.style.background   = over ? '#FFF5F5' : 'transparent';
+        group.style.background  = over ? '#FFF5F5' : 'transparent';
 
-        const sumEl = group.querySelector('.ks-group-sum');
+        const sumEl = group.querySelector('.ks-grp-sum');
         if (sumEl) {
             sumEl.textContent = `· entered: ${+sum.toFixed(4)}`;
             sumEl.style.color = over ? '#DC2626' : '#6B7280';
         }
     });
 
-    const order   = getOrder(sw);
-    const overall = grandTotal > order + 1e-9;
-    const box     = document.getElementById(`ksValidation_${sw}`);
+    const overAll = grandTotal > order + 1e-9;
+    const box     = document.getElementById(`ksval_${sid}`);
     if (box) {
-        if (overall || anyOver) {
+        if (overAll || anyOver) {
             box.style.color = '#DC2626';
             box.innerHTML =
-                `⚠️ ${overall ? `Total entered ${+grandTotal.toFixed(4)} exceeds Order ${order}. ` : ''}` +
-                `${anyOver ? 'One or more labels exceed their available value.' : ''}`;
+                (overAll ? `⚠️ Grand total ${+grandTotal.toFixed(4)} exceeds Order ${order}. ` : '') +
+                (anyOver && !overAll ? '⚠️ One or more labels exceed their available value.' : '');
         } else {
             box.style.color = '#059669';
-            box.innerHTML = `✅ Total entered ${+grandTotal.toFixed(4)} of Order ${order}.`;
+            box.innerHTML   = `✅ Grand total ${+grandTotal.toFixed(4)} — within Order ${order}.`;
         }
     }
-    return !(overall || anyOver);
+
+    const ok = !(overAll || anyOver);
+    if (!ok && toastOnFail) {
+        const msg = overAll
+            ? `${sw}: total entered (${+grandTotal.toFixed(1)}) exceeds Order (${order})`
+            : `${sw}: a label's keys exceed the available value`;
+        toast(`⚠️ ${msg}`, 'error');
+    }
+    return ok;
 }
 
-// ─────────────────────────────────────────────
-// TOGGLE KEY
-// ─────────────────────────────────────────────
+// ─── TOGGLE KEY ───────────────────────────────────────────────────────────
 
-async function toggleKeyInline(sw, label, keyId, checkbox) {
-    const params = new URLSearchParams({software: sw, dept: label, key_id: keyId});
-    const data   = await apiFetch(`/keystore/keys/toggle?${params}`, {method: 'POST'});
+async function toggleKeyInline(cb) {
+    const sw    = cb.dataset.sw;
+    const label = cb.dataset.label;
+    const keyId = cb.dataset.kid;
+    const params = new URLSearchParams({software:sw, dept:label, key_id:keyId});
+    const data   = await apiFetch(`/keystore/keys/toggle?${params}`, {method:'POST'});
     if (!data?.success) {
-        checkbox.checked = !checkbox.checked;
+        cb.checked = !cb.checked;
         toast('Failed to toggle key', 'error');
         return;
     }
-    // keep local registry in sync
     (keystoreRegistry[sw]?.keys || []).forEach(k => {
-        if (k.label === label && k.key_id === keyId) k.active = checkbox.checked;
+        if (k.label === label && k.key_id === keyId) k.active = cb.checked;
     });
-    toast(`${keyId} ${checkbox.checked ? 'activated ✅' : 'deactivated'}`,
-          checkbox.checked ? 'success' : 'warn');
+    toast(`${keyId} ${cb.checked ? 'activated ✅' : 'deactivated'}`,
+          cb.checked ? 'success' : 'warn');
 }
 
-// ─────────────────────────────────────────────
-// ADD KEY  (was missing — now wired to /keystore/keys/add)
-// ─────────────────────────────────────────────
+// ─── ADD KEY ──────────────────────────────────────────────────────────────
 
 async function addKeyInline(sw) {
-    const label = (document.getElementById(`addLabel_${sw}`).value || '').trim();
-    const keyId = (document.getElementById(`addKeyId_${sw}`).value || '').trim();
+    const sid   = safeid(sw);
+    const label = (document.getElementById(`addLabel_${sid}`)?.value || '').trim();
+    const keyId = (document.getElementById(`addKeyId_${sid}`)?.value || '').trim();
 
     if (!label || !keyId) { toast('Enter both a label and a key ID', 'warn'); return; }
 
     const params = new URLSearchParams({
         session_id: getSessionId(), software: sw, dept: label, key_id: keyId, active: true,
     });
-    const data = await apiFetch(`/keystore/keys/add?${params}`, {method: 'POST'});
-
+    const data = await apiFetch(`/keystore/keys/add?${params}`, {method:'POST'});
     if (!data?.success) { toast(data?.message || 'Could not add key', 'error'); return; }
 
     toast(`Key '${keyId}' added to ${label}`, 'success');
-    saveKeystoreValues(true);                 // preserve current inputs
-    await loadKeystore(getSoftware());        // refresh registry
-    renderKeystoreForTab(sw);                 // re-render keystore only
+    saveKeystoreValues(true);           // persist current inputs before re-render
+    await loadKeystore(getSoftware());  // refresh registry from server
+    renderKeystoreForTab(sw);           // re-render keystore section only
 }
 
-// ─────────────────────────────────────────────
-// COLLECT / SAVE VALUES  (flows into download → Excel)
-// ─────────────────────────────────────────────
+// ─── COLLECT / SAVE KEYSTORE VALUES ──────────────────────────────────────
 
 function collectKeystoreValues() {
     const userValues = {};
@@ -475,26 +474,36 @@ function collectKeystoreValues() {
         if (inp.value === '') return;
         const sw    = inp.dataset.sw;
         const label = inp.dataset.label;
+        // key_id is the third ~~-segment of the id
         const keyId = inp.id.split('~~')[2];
-        userValues[sw]               = userValues[sw]              || {};
-        userValues[sw][label]        = userValues[sw][label]       || {};
+        if (!keyId) return;
+        userValues[sw]               = userValues[sw]        || {};
+        userValues[sw][label]        = userValues[sw][label] || {};
         userValues[sw][label][keyId] = parseFloat(inp.value) || 0;
     });
-    // merge with anything saved for other tabs not currently in the DOM
+    // merge: keep values from other tabs (not currently in DOM)
     const existing = JSON.parse(sessionStorage.getItem('keystore_values_temp') || '{}');
-    const merged   = {...existing, ...userValues};
+    const merged   = Object.assign({}, existing, userValues);
     sessionStorage.setItem('keystore_values_temp', JSON.stringify(merged));
     return merged;
 }
 
 function saveKeystoreValues(silent) {
     collectKeystoreValues();
-    if (!silent) toast('Keystore values saved', 'success');
+    // validate all visible software
+    const software = getSoftware();
+    let allOk = true;
+    software.forEach(sw => {
+        const ok = recomputeKeystore(sw, !silent);  // toast on fail unless silent
+        if (!ok) allOk = false;
+    });
+    if (!silent) {
+        toast(allOk ? 'Values saved ✅' : 'Values saved (with warnings ⚠️ — see red groups)',
+              allOk ? 'success' : 'warn');
+    }
 }
 
-// ─────────────────────────────────────────────
-// DOWNLOAD ALL
-// ─────────────────────────────────────────────
+// ─── DOWNLOAD ALL ─────────────────────────────────────────────────────────
 
 async function downloadAll() {
     const sid       = getSessionId();
@@ -503,12 +512,20 @@ async function downloadAll() {
     const perSwInputs = {};
     software.forEach(sw => { perSwInputs[sw] = allInputs[sw] || {annual:0, advent:0, onshore:0}; });
 
-    const keystoreValues = collectKeystoreValues();   // fresh, no need to click Save first
+    // Validate all open keystores and warn (but don't block) if issues
+    let anyFail = false;
+    software.forEach(sw => { if (!recomputeKeystore(sw, true)) anyFail = true; });
+    if (anyFail) {
+        // give user a moment to see the toast before the download spinner appears
+        await new Promise(r => setTimeout(r, 600));
+    }
 
-    showLoading('Generating Excel report...');
+    const keystoreValues = collectKeystoreValues();
+
+    showLoading('Generating Excel report…');
     try {
         const response = await fetch('/download/', {
-            method: 'POST',
+            method:  'POST',
             headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({
                 session_id:      sid,
@@ -531,7 +548,7 @@ async function downloadAll() {
         document.body.appendChild(a); a.click(); a.remove();
         window.URL.revokeObjectURL(url);
         hideLoading();
-        toast('Download complete! ✅', 'success');
+        toast('Download complete ✅', 'success');
     } catch(e) {
         hideLoading();
         toast('Download failed: ' + e.message, 'error');
