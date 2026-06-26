@@ -50,7 +50,7 @@ def table1(
 ):
     session  = get_session(session_id)
     sw_list  = [s.strip() for s in software.split(",")]
-    annual_v = annual if annual is not None else session.user_inputs["annual"]
+    annual_v = annual if annual is not None else 0
 
     data = build_table1(
         sw_agg        = session.sw_agg,

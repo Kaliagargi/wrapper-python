@@ -1,8 +1,5 @@
 import json
 import math
-from pickle import FALSE
-from tkinter import SEL_FIRST
-from unittest import result
 from core.errors import SoftwareNotFoundError
 def safe_num(value):
     try:
@@ -48,6 +45,7 @@ def get_software_by_developer(sw_agg: dict, developers:list) ->list:
 
 def build_table1(sw_agg: dict , software_list:list,annual:float = 0,advent:float=0) -> list:
     rows=[]
+    advent_v = safe_num(advent)
     for sw in software_list:
         if sw not in sw_agg:
             continue
@@ -56,8 +54,8 @@ def build_table1(sw_agg: dict , software_list:list,annual:float = 0,advent:float
         data = sw_agg[sw]
         lease = safe_num(data["lease_lic"])
         annual_v = safe_num(annual)
-        if advent != 0 and sw=="SMARTPLANT 3D":
-            order = lease - annual_v + advent  if annual_v > 0 else lease
+        if advent_v != 0 and sw=="SMARTPLANT 3D":
+            order = lease - annual_v + advent_v  if annual_v > 0 else lease
         else: 
             order = lease - annual_v  if annual_v > 0 else lease
 
@@ -68,6 +66,7 @@ def build_table1(sw_agg: dict , software_list:list,annual:float = 0,advent:float
             "own_lic":safe_num(data["own_lic"]),
             "lease_lic":lease,
             "annual":annual_v,
+            "advent":advent_v,
             "order_lic":order,
         })
     return rows
@@ -380,45 +379,38 @@ def build_table_keystore(
 ) -> dict:
     from core.errors import SoftwareNotFoundError
 
-    result = {}
+    registry = load()
+    result   = {}
 
     for sw in software_list:
         if sw not in sw_agg:
             raise SoftwareNotFoundError(sw)
 
-        # Get all unique depts for this software
-        sw_records = [r for r in records if r["software"] == sw]
-        all_depts  = list({r["dept"].strip() for r in sw_records})
+        sw_registry = registry.get(sw, {})
+        keys_list   = []
 
-        # Add computed labels too
-        computed_labels = ["NPP", "CV", "PP", "Valdel", "CEC", "VEC"]
-        all_labels = list({*all_depts, *computed_labels})
+        # Walk EVERY label + key defined for this software in the registry,
+        # so nothing the user added is silently dropped.
+        for label, dept_data in sw_registry.items():
+            if not isinstance(dept_data, dict):
+                continue
+            for key_id, meta in dept_data.items():
+                active = meta.get("active", True) if isinstance(meta, dict) else True
 
-        keys_list = []
-
-        for label in all_labels:
-            # Get keys for this software + label
-            status_map = keys_with_status(sw, label)
-
-            if not status_map:
-                continue  # no keys defined for this label, skip
-
-            for key_id, active in status_map.items():
-                # Use YOUR keystore_calculator for the value
-                value = keystore_calculator(
-                    records  = records,
-                    software = sw,
-                    dept     = label,
-                    value    = key_id,
+                # Values are supplied by the frontend (derived from the tables
+                # each label belongs to) and arrive here via user_values so they
+                # are written into the downloaded Excel.
+                value = (
+                    user_values.get(sw, {})
+                               .get(label, {})
+                               .get(key_id, None)
                 )
-                if value is None:
-                   value = user_values.get(sw, {}).get(label, {}).get(key_id, None)
 
                 keys_list.append({
                     "label":  label,
                     "key_id": key_id,
                     "active": active,
-                    "value":  value,  # None → frontend shows input box
+                    "value":  value,   # None → "User Input" in Excel
                 })
 
         result[sw] = {
