@@ -257,7 +257,7 @@ def write_sheet4(wb, table4_data: dict):
         )
         row += 1
 
-        for ci, h in enumerate(["Dept", "LTM", "Share", "Total"], 1):
+        for ci, h in enumerate(["Dept", "LTC Total", "Others", "Grand Total"], 1):
             hdr(ws, row, ci, h)
         row += 1
 
@@ -267,21 +267,21 @@ def write_sheet4(wb, table4_data: dict):
 
             if is_total:
                 total_row(ws, row, "TOTAL", {
-                    2: r["ltm"],
-                    3: r["share"],
-                    4: r["total"],
+                    2: r["ltc_total"],
+                    3: r["others"],
+                    4: r["grand"],
                 }, ncols)
             else:
-                val(ws, row, 1, r["dept"],  alt=alt, left=True)
-                val(ws, row, 2, r["ltm"],   alt=alt)
-                val(ws, row, 3, r["share"], alt=alt)
-                val(ws, row, 4, r["total"], alt=alt)
+                val(ws, row, 1, r["dept"],      alt=alt, left=True)
+                val(ws, row, 2, r["ltc_total"], alt=alt)
+                val(ws, row, 3, r["others"],    alt=alt)
+                val(ws, row, 4, r["grand"],     alt=alt)
             row += 1
 
         gap_row(ws, row, ncols)
         row += 2
 
-    for ci, w in zip("ABCD", [16, 12, 12, 12]):
+    for ci, w in zip("ABCD", [16, 14, 14, 14]):
         ws.column_dimensions[ci].width = w
     ws.freeze_panes = "A3"
 

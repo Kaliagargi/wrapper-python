@@ -2,7 +2,6 @@
 
 import uuid
 from datetime import datetime, timedelta
-import pandas as pd
 
 SESSION_EXPIRY_HOURS = 8
 
@@ -28,6 +27,10 @@ class Session:
         self.sw_agg         = sw_agg          # grouped by software
         self.created_at     = datetime.now()
         self.expires_at     = datetime.now() + timedelta(hours=SESSION_EXPIRY_HOURS)
+
+        # User edits — shadows records/sw_agg without touching originals
+        # structure: {sw: {own_lic, lease_lic, dept_totals: {dept: {grand_ltc, others}}}}
+        self.overrides: dict = {}
 
     def is_expired(self) -> bool:
         return datetime.now() > self.expires_at

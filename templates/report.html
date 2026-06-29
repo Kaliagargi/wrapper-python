@@ -4,17 +4,24 @@
 {% block content %}
 <div class="page-header">
     <h2>📋 Licence Report</h2>
-    <p>All tables computed per software. Keystore appears below each software's tables.</p>
+    <p>All tables computed per software.</p>
 </div>
 
 <!-- Software Tabs -->
-<div style="display:flex; gap:0; margin-bottom:24px;
-            border-bottom:2px solid #E5E7EB; overflow-x:auto;">
+<div style="border-bottom:2px solid #E5E7EB; margin-bottom:0; overflow-x:auto;">
     <div id="swTabs" style="display:flex; gap:0;"></div>
 </div>
 
+<!-- Edit Panel — hidden by default, appears below tabs when Edit clicked -->
+<div id="editPanel"
+     style="display:none; background:white; border:1.5px solid #2563EB;
+            border-top:none; border-radius:0 0 12px 12px; padding:24px;
+            margin-bottom:20px; box-shadow:0 4px 12px rgba(37,99,235,0.1);">
+    <div id="editPanelContent"></div>
+</div>
+
 <!-- Tab Content -->
-<div id="tabContent"></div>
+<div id="tabContent" style="margin-top:20px;"></div>
 
 <!-- Bottom Actions -->
 <div style="display:flex; gap:12px; margin-top:24px; flex-wrap:wrap;">
@@ -26,23 +33,17 @@
 {% block scripts %}
 <script>
 let activeSw         = null;
-let allTableData     = {};   // {sw: {t1, t2, t3, t4}}
-let keystoreRegistry = {};   // {sw: {developer, keys:[...]}}
+let allTableData     = {};
+let keystoreRegistry = {};
 
-// ─── safe DOM-ID helper (spaces / special chars → underscores) ────────────
-// ALWAYS use safeid(sw) in id="..." and querySelector, never bare sw.
-// Keep bare sw for API calls and data attributes.
-function safeid(sw) {
-    return sw.replace(/[^a-zA-Z0-9]/g, '_');
-}
+// ─── safeid ───────────────────────────────────────────────────────────────
+function safeid(sw) { return sw.replace(/[^a-zA-Z0-9]/g, '_'); }
 
 // ─── INIT ─────────────────────────────────────────────────────────────────
-
 document.addEventListener('DOMContentLoaded', async () => {
     const software = getSoftware();
     if (!software || software.length === 0) {
-        window.location.href = '/dashboard';
-        return;
+        window.location.href = '/dashboard'; return;
     }
     renderTabs(software);
     await loadAllData(software);
@@ -51,38 +52,35 @@ document.addEventListener('DOMContentLoaded', async () => {
 });
 
 // ─── RENDER TABS ──────────────────────────────────────────────────────────
-
 function renderTabs(software) {
     const container = document.getElementById('swTabs');
     container.innerHTML = software.map((sw, i) => `
         <button id="tab_${safeid(sw)}"
-                onclick="switchTab('${sw.replace(/'/g,"\\'")}')}"
-                onclick="switchTab_btn(this, '${sw.replace(/'/g,"\\'")}')"
+                data-sw="${sw}"
                 style="padding:10px 24px; border:none; cursor:pointer;
                        font-size:13px; font-weight:600; white-space:nowrap;
-                       background:${i===0 ? 'white' : 'transparent'};
-                       color:${i===0 ? '#2563EB' : '#6B7280'};
-                       border-bottom:${i===0 ? '2px solid #2563EB' : '2px solid transparent'};
-                       margin-bottom:-2px; transition:all 0.15s;"
-                data-sw="${sw}">
+                       background:${i===0?'white':'transparent'};
+                       color:${i===0?'#2563EB':'#6B7280'};
+                       border-bottom:${i===0?'2px solid #2563EB':'2px solid transparent'};
+                       margin-bottom:-2px; transition:all 0.15s;">
             🖥️ ${sw}
             <span id="tabstatus_${safeid(sw)}"
-                  style="margin-left:6px; font-size:10px;
-                         background:#E5E7EB; color:#6B7280;
-                         padding:2px 6px; border-radius:10px;">⏳</span>
+                  style="margin-left:6px; font-size:10px; background:#E5E7EB;
+                         color:#6B7280; padding:2px 6px; border-radius:10px;">⏳</span>
         </button>
     `).join('');
-    // fix onclick: delegate to data attribute to avoid quoting nightmares
     document.querySelectorAll('#swTabs button[data-sw]').forEach(btn => {
         btn.onclick = () => switchTab(btn.dataset.sw);
     });
 }
 
 // ─── SWITCH TAB ───────────────────────────────────────────────────────────
-
 function switchTab(sw) {
+    // close edit panel when switching tabs
+    closeEditPanel();
+
     document.querySelectorAll('#swTabs button[data-sw]').forEach(btn => {
-        const isActive = btn.dataset.sw === sw;
+        const isActive     = btn.dataset.sw === sw;
         btn.style.color        = isActive ? '#2563EB' : '#6B7280';
         btn.style.background   = isActive ? 'white'   : 'transparent';
         btn.style.borderBottom = isActive ? '2px solid #2563EB' : '2px solid transparent';
@@ -97,8 +95,7 @@ function switchTab(sw) {
     renderTabContent(sw, data);
 }
 
-// ─── LOAD ALL TABLE DATA ─────────────────────────────────────────────────
-
+// ─── LOAD ALL TABLE DATA ──────────────────────────────────────────────────
 async function loadAllData(software) {
     const sid       = getSessionId();
     const allInputs = Session.get('inputs') || {};
@@ -108,13 +105,10 @@ async function loadAllData(software) {
 
         const p1 = new URLSearchParams({session_id:sid, software:sw, annual:inp.annual, advent:inp.advent});
         const d1 = await apiFetch(`/tables/table1?${p1}`);
-
         const p2 = new URLSearchParams({session_id:sid, software:sw, advent:inp.advent, onshore:inp.onshore});
         const d2 = await apiFetch(`/tables/table2?${p2}`);
-
         const p3 = new URLSearchParams({session_id:sid, software:sw, annual:inp.annual, advent:inp.advent, onshore:inp.onshore});
         const d3 = await apiFetch(`/tables/table3?${p3}`);
-
         const p4 = new URLSearchParams({session_id:sid, software:sw});
         const d4 = await apiFetch(`/tables/table4?${p4}`);
 
@@ -134,8 +128,7 @@ async function loadAllData(software) {
     }
 }
 
-// ─── LOAD KEYSTORE REGISTRY (GET) ────────────────────────────────────────
-
+// ─── LOAD KEYSTORE REGISTRY ───────────────────────────────────────────────
 async function loadKeystore(software) {
     const sid    = getSessionId();
     const params = new URLSearchParams({session_id:sid, software:software.join(',')});
@@ -143,85 +136,429 @@ async function loadKeystore(software) {
     keystoreRegistry = (data?.success ? data.data : {}) || {};
 }
 
-// ─── RENDER TAB CONTENT ───────────────────────────────────────────────────
-
+// ─── RENDER TAB CONTENT (all tables read-only) ────────────────────────────
 function renderTabContent(sw, data) {
     const sid = safeid(sw);
-    const container = document.getElementById('tabContent');
-    container.innerHTML = `
+    document.getElementById('tabContent').innerHTML = `
+
+        <!-- Edit button -->
+        <div style="display:flex; justify-content:flex-end; margin-bottom:16px;">
+            <button class="btn btn-outline btn-sm" id="editBtn_${sid}"
+                    onclick="toggleEditPanel('${sw}')">
+                ✏️ Edit Licence Values
+            </button>
+        </div>
+
+        <!-- T1 read-only -->
         <div class="card">
             <div class="card-title" style="margin:0 0 16px">📊 Licence Summary</div>
             <div id="t1_${sid}"></div>
         </div>
+
+        <!-- T2 read-only -->
         <div class="card">
             <div class="card-title" style="margin:0 0 16px">📋 Department Lease Distribution</div>
             <div id="t2_${sid}"></div>
         </div>
+
+        <!-- T3 read-only -->
         <div class="card">
             <div class="card-title" style="margin:0 0 16px">🔢 Sub Location Breakups</div>
             <div id="t3_${sid}"></div>
         </div>
+
+        <!-- T4 read-only -->
         <div class="card">
             <div class="card-title" style="margin:0 0 16px">🏦 ISL — Dept Wise Breakdown</div>
             <div id="t4_${sid}"></div>
         </div>
+
+        <!-- Keystore -->
         <div id="ks_${sid}_wrap"></div>
     `;
 
-    renderTable(`t1_${sid}`,
-        ['Developer','Software','Total Lic','Own Lic','Lease Lic','Annual','Advent','Order'],
-        data.t1.map(r => ({
-            developer:r.developer, software:r.software,
-            total_lic:r.total_lic, own_lic:r.own_lic,
-            lease_lic:r.lease_lic, annual:r.annual,
-            advent:r.advent, order:r.order_lic,
-        }))
-    );
-
-    const t2rows = [];
-    Object.values(data.t2).forEach(d => d.rows.forEach(r =>
-        t2rows.push({category:r.label, description:r.description||'', value:r.value})
-    ));
-    renderTable(`t2_${sid}`, ['Category','Description','Value'], t2rows);
-
-    const t3rows = [];
-    Object.values(data.t3).forEach(d => d.rows.forEach(r =>
-        t3rows.push({category:r.label, value:r.value})
-    ));
-    renderTable(`t3_${sid}`, ['Category','Value'], t3rows);
-
-    const t4rows = [];
-    Object.values(data.t4).forEach(d => d.rows.forEach(r =>
-        t4rows.push({dept:r.dept, ltm:r.ltm, share:r.share, total:r.total})
-    ));
-    renderTable(`t4_${sid}`, ['Dept','LTM','Share','Total'], t4rows);
-
+    renderT1(sw, data.t1);
+    renderT2(sw, data.t2);
+    renderT3(sw, data.t3);
+    renderT4(sw, data.t4);
     renderKeystoreForTab(sw);
 }
 
-// ─── DERIVE LABEL → AVAILABLE VALUE (from this sw's already-loaded tables)
-// Matches on UPPER-CASE label; table rows use their own casing.
+// ─── READ-ONLY TABLE RENDERERS ────────────────────────────────────────────
+function renderT1(sw, t1rows) {
+    const sid = safeid(sw);
+    const el  = document.getElementById(`t1_${sid}`);
+    if (!t1rows?.length) { el.innerHTML = '<div class="alert alert-info">No data.</div>'; return; }
+    const r = t1rows[0];
+    el.innerHTML = `<div class="table-wrapper"><table>
+        <thead><tr>
+            <th>Developer</th><th>Software</th><th>Total Lic</th>
+            <th>Own Lic</th><th>Lease Lic</th><th>Annual</th><th>Advent</th><th>Order</th>
+        </tr></thead>
+        <tbody><tr>
+            <td>${r.developer}</td><td>${r.software}</td><td>${r.total_lic}</td>
+            <td>${r.own_lic}</td><td>${r.lease_lic}</td>
+            <td>${r.annual}</td><td>${r.advent}</td><td>${r.order_lic}</td>
+        </tr></tbody>
+    </table></div>`;
+}
 
+function renderT2(sw, t2data) {
+    const sid    = safeid(sw);
+    const t2rows = [];
+    Object.values(t2data || {}).forEach(d => d.rows.forEach(r =>
+        t2rows.push({category: r.label, description: r.description||'', value: r.value})
+    ));
+    renderTable(`t2_${sid}`, ['Category','Description','Value'], t2rows);
+}
+
+function renderT3(sw, t3data) {
+    const sid    = safeid(sw);
+    const t3rows = [];
+    Object.values(t3data || {}).forEach(d => d.rows.forEach(r =>
+        t3rows.push({category: r.label, value: r.value})
+    ));
+    renderTable(`t3_${sid}`, ['Category','Value'], t3rows);
+}
+
+function renderT4(sw, t4data) {
+    const sid    = safeid(sw);
+    const t4rows = [];
+    Object.values(t4data || {}).forEach(d => d.rows.forEach(r =>
+        t4rows.push({dept: r.dept, ltc_total: r.ltc_total, others: r.others, grand: r.grand})
+    ));
+    renderTable(`t4_${sid}`, ['Dept','LTC Total','Others','Grand Total'], t4rows);
+}
+
+// ─── EDIT PANEL ───────────────────────────────────────────────────────────
+function toggleEditPanel(sw) {
+    const panel = document.getElementById('editPanel');
+    const sid   = safeid(sw);
+    const btn   = document.getElementById(`editBtn_${sid}`);
+    if (panel.style.display !== 'none') {
+        closeEditPanel();
+    } else {
+        renderEditPanel(sw);
+        panel.style.display = 'block';
+        if (btn) btn.textContent = '✕ Close Editor';
+    }
+}
+
+function closeEditPanel() {
+    const panel = document.getElementById('editPanel');
+    panel.style.display = 'none';
+    // reset all edit buttons
+    document.querySelectorAll('[id^="editBtn_"]').forEach(b => {
+        b.textContent = '✏️ Edit Licence Values';
+    });
+}
+
+function renderEditPanel(sw) {
+    const sid   = safeid(sw);
+    const data  = allTableData[sw];
+    const r1    = data?.t1?.[0] || {};
+    const t4sw  = data?.t4?.[sw];
+    const depts = (t4sw?.rows || []).filter(r => r.dept !== 'TOTAL');
+
+    let deptRows = depts.map((r, i) => `
+        <tr style="background:${i%2===0?'#F9FAFB':'white'}">
+            <td style="padding:6px 12px; font-weight:600;">${r.dept}</td>
+            <td style="padding:6px 8px;">
+                <input type="number" step="any"
+                       id="ep_ltc_${sid}_${r.dept}"
+                       value="${r.ltc_total}"
+                       oninput="epUpdateGrand('${sw}','${r.dept}')"
+                       style="width:100px; padding:4px 8px; border:1.5px solid #2563EB;
+                              border-radius:4px; background:#EFF6FF; font-size:13px;">
+            </td>
+            <td style="padding:6px 8px;">
+                <input type="number" step="any"
+                       id="ep_oth_${sid}_${r.dept}"
+                       value="${r.others}"
+                       oninput="epUpdateGrand('${sw}','${r.dept}')"
+                       style="width:100px; padding:4px 8px; border:1.5px solid #2563EB;
+                              border-radius:4px; background:#EFF6FF; font-size:13px;">
+            </td>
+            <td style="padding:6px 12px; font-weight:600;" id="ep_gnd_${sid}_${r.dept}">
+                ${r.grand}
+            </td>
+        </tr>`).join('');
+
+    document.getElementById('editPanelContent').innerHTML = `
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+            <div style="font-size:15px; font-weight:700; color:#1A2B4A;">
+                ✏️ Editing — ${sw}
+            </div>
+            <div style="display:flex; gap:8px;">
+                <button class="btn btn-primary btn-sm" onclick="saveAndRecompute('${sw}')">
+                    🔄 Save & Recompute
+                </button>
+                <button class="btn btn-ghost btn-sm" onclick="resetOverrides('${sw}')">
+                    ↩ Reset to Original
+                </button>
+                <button class="btn btn-ghost btn-sm" onclick="closeEditPanel()">
+                    ✕ Cancel
+                </button>
+            </div>
+        </div>
+        <span id="ep_status_${sid}" style="font-size:12px; color:#6B7280; display:block; margin-bottom:16px;"></span>
+
+        <!-- Licence Summary edits -->
+        <div style="margin-bottom:20px;">
+            <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase;
+                        letter-spacing:0.6px; margin-bottom:10px;">
+                Licence Summary
+            </div>
+            <div style="display:flex; gap:24px; flex-wrap:wrap; align-items:flex-end;">
+                <div>
+                    <label style="display:block; font-size:11px; color:#6B7280; margin-bottom:4px;">
+                        Own Lic
+                    </label>
+                    <input type="number" step="any" id="ep_own_${sid}"
+                           value="${r1.own_lic ?? ''}"
+                           oninput="epUpdateT1Total('${sw}')"
+                           style="width:120px; padding:7px 10px; border:1.5px solid #2563EB;
+                                  border-radius:6px; background:#EFF6FF; font-size:14px;">
+                </div>
+                <div>
+                    <label style="display:block; font-size:11px; color:#6B7280; margin-bottom:4px;">
+                        Lease Lic
+                    </label>
+                    <input type="number" step="any" id="ep_lease_${sid}"
+                           value="${r1.lease_lic ?? ''}"
+                           oninput="epUpdateT1Total('${sw}')"
+                           style="width:120px; padding:7px 10px; border:1.5px solid #2563EB;
+                                  border-radius:6px; background:#EFF6FF; font-size:14px;">
+                </div>
+                <div style="padding-bottom:2px;">
+                    <div style="font-size:11px; color:#6B7280; margin-bottom:4px;">Total Lic</div>
+                    <div id="ep_total_${sid}"
+                         style="font-size:18px; font-weight:700; color:#1A2B4A; min-width:60px;">
+                        ${r1.total_lic ?? '—'}
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ISL edits -->
+        <div>
+            <div style="font-size:12px; font-weight:700; color:#6B7280; text-transform:uppercase;
+                        letter-spacing:0.6px; margin-bottom:10px;">
+                ISL — Dept Wise Breakdown
+                <span style="font-size:11px; font-weight:400; text-transform:none; margin-left:8px; color:#9CA3AF;">
+                    Grand Total must equal Total Lic above
+                </span>
+            </div>
+            <div class="table-wrapper">
+            <table style="font-size:13px;">
+                <thead><tr>
+                    <th style="text-align:left; padding:8px 12px;">Dept</th>
+                    <th style="padding:8px 12px;">LTC Total ✏️</th>
+                    <th style="padding:8px 12px;">Others ✏️</th>
+                    <th style="padding:8px 12px;">Grand Total</th>
+                </tr></thead>
+                <tbody>
+                    ${deptRows}
+                    <tr style="font-weight:700; background:#FFFBEB;">
+                        <td style="padding:6px 12px;">TOTAL</td>
+                        <td style="padding:6px 12px;" id="ep_ltc_total_${sid}">
+                            ${t4sw?.rows.find(r=>r.dept==='TOTAL')?.ltc_total ?? ''}
+                        </td>
+                        <td style="padding:6px 12px;" id="ep_oth_total_${sid}">
+                            ${t4sw?.rows.find(r=>r.dept==='TOTAL')?.others ?? ''}
+                        </td>
+                        <td style="padding:6px 12px;" id="ep_gnd_total_${sid}">
+                            ${t4sw?.rows.find(r=>r.dept==='TOTAL')?.grand ?? ''}
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+            </div>
+        </div>
+    `;
+}
+
+// live updates inside edit panel
+function epUpdateT1Total(sw) {
+    const sid   = safeid(sw);
+    const own   = parseFloat(document.getElementById(`ep_own_${sid}`)?.value)   || 0;
+    const lease = parseFloat(document.getElementById(`ep_lease_${sid}`)?.value) || 0;
+    const el    = document.getElementById(`ep_total_${sid}`);
+    if (el) el.textContent = +(own + lease).toFixed(4);
+}
+
+function epUpdateGrand(sw, dept) {
+    const sid = safeid(sw);
+    const ltc = parseFloat(document.getElementById(`ep_ltc_${sid}_${dept}`)?.value) || 0;
+    const oth = parseFloat(document.getElementById(`ep_oth_${sid}_${dept}`)?.value) || 0;
+    const el  = document.getElementById(`ep_gnd_${sid}_${dept}`);
+    if (el) el.textContent = +(ltc + oth).toFixed(4);
+    epUpdateISLTotals(sw);
+}
+
+function epUpdateISLTotals(sw) {
+    const sid   = safeid(sw);
+    const data  = allTableData[sw]?.t4?.[sw];
+    if (!data) return;
+    const depts = data.rows.filter(r => r.dept !== 'TOTAL');
+    let tLtc = 0, tOth = 0;
+    depts.forEach(r => {
+        tLtc += parseFloat(document.getElementById(`ep_ltc_${sid}_${r.dept}`)?.value) || 0;
+        tOth += parseFloat(document.getElementById(`ep_oth_${sid}_${r.dept}`)?.value) || 0;
+    });
+    const ltcEl = document.getElementById(`ep_ltc_total_${sid}`);
+    const othEl = document.getElementById(`ep_oth_total_${sid}`);
+    const gndEl = document.getElementById(`ep_gnd_total_${sid}`);
+    if (ltcEl) ltcEl.textContent = +tLtc.toFixed(4);
+    if (othEl) othEl.textContent = +tOth.toFixed(4);
+    if (gndEl) gndEl.textContent = +(tLtc + tOth).toFixed(4);
+}
+
+// ─── SAVE & RECOMPUTE ─────────────────────────────────────────────────────
+async function saveAndRecompute(sw) {
+    const sid      = safeid(sw);
+    const statusEl = document.getElementById(`ep_status_${sid}`);
+    const inp      = Session.get('inputs') || {};
+    const swInp    = inp[sw] || {annual:0, advent:0, onshore:0};
+
+    const own_lic   = parseFloat(document.getElementById(`ep_own_${sid}`)?.value);
+    const lease_lic = parseFloat(document.getElementById(`ep_lease_${sid}`)?.value);
+
+    if (isNaN(own_lic) || isNaN(lease_lic)) {
+        toast('Please fill Own Lic and Lease Lic', 'error'); return;
+    }
+
+    const data4   = allTableData[sw]?.t4?.[sw];
+    if (!data4) { toast(`ISL data missing for ${sw}`, 'error'); return; }
+
+    const depts       = data4.rows.filter(r => r.dept !== 'TOTAL');
+    const dept_totals = {};
+    let t4Edited      = false;
+
+    for (const r of depts) {
+        const ltcEl = document.getElementById(`ep_ltc_${sid}_${r.dept}`);
+        const othEl = document.getElementById(`ep_oth_${sid}_${r.dept}`);
+        if (!ltcEl || !othEl) continue;
+        dept_totals[r.dept.toLowerCase()] = {
+            grand_ltc: parseFloat(ltcEl.value) || 0,
+            others:    parseFloat(othEl.value) || 0,
+        };
+        if (parseFloat(ltcEl.value) !== r.ltc_total ||
+            parseFloat(othEl.value) !== r.others) t4Edited = true;
+    }
+
+    const origRow  = allTableData[sw]?.t1?.[0] || {};
+    const t1Edited = own_lic !== origRow.own_lic || lease_lic !== origRow.lease_lic;
+
+    if (t1Edited && !t4Edited) {
+        toast(`⚠️ ${sw}: Licence Summary edited — please update ISL dept values too`, 'warn');
+        return;
+    }
+    if (t4Edited && !t1Edited) {
+        toast(`⚠️ ${sw}: ISL edited — please update Own Lic / Lease Lic too`, 'warn');
+        return;
+    }
+
+    // show loading on tab badge
+    const badge = document.getElementById(`tabstatus_${sid}`);
+    if (badge) { badge.textContent='⏳'; badge.style.background='#FEF9C3'; badge.style.color='#92400E'; }
+    if (statusEl) statusEl.textContent = 'Recomputing…';
+
+    const response = await apiFetch('/tables/overrides', {
+        method:  'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+            session_id: getSessionId(),
+            software:   sw,
+            own_lic, lease_lic, dept_totals,
+            annual:  swInp.annual  || 0,
+            advent:  swInp.advent  || 0,
+            onshore: swInp.onshore || 0,
+        }),
+    });
+
+    if (!response?.success) {
+        toast(response?.message || 'Recompute failed', 'error');
+        if (badge) { badge.textContent='⚠️'; badge.style.background='#FEE2E2'; badge.style.color='#991B1B'; }
+        if (statusEl) statusEl.textContent = '';
+        return;
+    }
+
+    // update in-memory data with fresh recomputed values
+    allTableData[sw].t1 = response.data.t1;
+    allTableData[sw].t2 = response.data.t2;
+    allTableData[sw].t3 = response.data.t3;
+    allTableData[sw].t4 = response.data.t4;
+
+    // close edit panel, re-render read-only tables
+    closeEditPanel();
+    renderT1(sw, response.data.t1);
+    renderT2(sw, response.data.t2);
+    renderT3(sw, response.data.t3);
+    renderT4(sw, response.data.t4);
+    recomputeKeystore(sw);
+
+    if (badge) { badge.textContent='✅'; badge.style.background='#ECFDF5'; badge.style.color='#059669'; }
+    toast(`${sw} recomputed ✅`, 'success');
+}
+
+// ─── RESET OVERRIDES ──────────────────────────────────────────────────────
+async function resetOverrides(sw) {
+    const sid_    = getSessionId();
+    const sid     = safeid(sw);
+
+    // tell backend to clear overrides for this software
+    await apiFetch(
+        `/tables/reset-overrides?session_id=${encodeURIComponent(sid_)}&software=${encodeURIComponent(sw)}`,
+        {method: 'POST'}
+    );
+
+    // re-fetch fresh original data from server
+    const inp   = Session.get('inputs') || {};
+    const swInp = inp[sw] || {annual:0, advent:0, onshore:0};
+
+    const p1 = new URLSearchParams({session_id:sid_, software:sw, annual:swInp.annual, advent:swInp.advent});
+    const d1 = await apiFetch(`/tables/table1?${p1}`);
+    const p2 = new URLSearchParams({session_id:sid_, software:sw, advent:swInp.advent, onshore:swInp.onshore});
+    const d2 = await apiFetch(`/tables/table2?${p2}`);
+    const p3 = new URLSearchParams({session_id:sid_, software:sw, annual:swInp.annual, advent:swInp.advent, onshore:swInp.onshore});
+    const d3 = await apiFetch(`/tables/table3?${p3}`);
+    const p4 = new URLSearchParams({session_id:sid_, software:sw});
+    const d4 = await apiFetch(`/tables/table4?${p4}`);
+
+    allTableData[sw] = {
+        t1: d1?.success ? d1.data : [],
+        t2: d2?.success ? d2.data : {},
+        t3: d3?.success ? d3.data : {},
+        t4: d4?.success ? d4.data : {},
+    };
+
+    closeEditPanel();
+    renderT1(sw, allTableData[sw].t1);
+    renderT2(sw, allTableData[sw].t2);
+    renderT3(sw, allTableData[sw].t3);
+    renderT4(sw, allTableData[sw].t4);
+    recomputeKeystore(sw);
+
+    const badge = document.getElementById(`tabstatus_${sid}`);
+    if (badge) { badge.textContent='✅'; badge.style.background='#ECFDF5'; badge.style.color='#059669'; }
+    toast(`${sw} reset to original values`, 'success');
+}
+
+// ─── KEYSTORE ─────────────────────────────────────────────────────────────
 function deriveAvailable(sw) {
     const data  = allTableData[sw] || {};
     const avail = {};
-    const put = (label, v) => {
+    const put   = (label, v) => {
         if (label == null) return;
         const n = Number(v);
         if (!isNaN(n)) avail[String(label).toUpperCase()] = n;
     };
-
-    // Licence Summary → Order, Advent, Annual
     const r1 = (data.t1 || []).find(r => r.software === sw) || (data.t1 || [])[0];
     if (r1) { put('ORDER', r1.order_lic); put('ADVENT', r1.advent); put('ANNUAL', r1.annual); }
-
-    // Required (t3) — Valdel, PP, CEC, VEC, Onshore …
     Object.values(data.t3 || {}).forEach(d => d.rows.forEach(r => put(r.label, r.value)));
-
-    // Allocated (t2) — NPP, PP, CV, Advent, Onshore … (overwrites t3 on overlap intentionally)
     Object.values(data.t2 || {}).forEach(d => d.rows.forEach(r => put(r.label, r.value)));
-
-    return avail;   // keys are UPPER-CASE
+    return avail;
 }
 
 function getOrder(sw) {
@@ -230,51 +567,40 @@ function getOrder(sw) {
     return r1 ? (Number(r1.order_lic) || 0) : 0;
 }
 
-// ─── KEYSTORE INPUT ID ────────────────────────────────────────────────────
-// Use ~~ as separator; sw goes through safeid() so no spaces in the id.
-
-function kvalId(sw, label, keyId) {
-    return `kval_${safeid(sw)}~~${label}~~${keyId}`;
-}
-
-// ─── RENDER KEYSTORE FOR ONE TAB ─────────────────────────────────────────
+function kvalId(sw, label, keyId) { return `kval_${safeid(sw)}~~${label}~~${keyId}`; }
 
 function renderKeystoreForTab(sw) {
-    const sid   = safeid(sw);
-    const wrap  = document.getElementById(`ks_${sid}_wrap`);
+    const sid  = safeid(sw);
+    const wrap = document.getElementById(`ks_${sid}_wrap`);
     if (!wrap) return;
 
-    const reg    = keystoreRegistry[sw];
-    const avail  = deriveAvailable(sw);
-    const saved  = JSON.parse(sessionStorage.getItem('keystore_values_temp') || '{}');
+    const reg     = keystoreRegistry[sw];
+    const avail   = deriveAvailable(sw);
+    const saved   = JSON.parse(sessionStorage.getItem('keystore_values_temp') || '{}');
     const savedSw = saved[sw] || {};
 
-    // Group registry keys by label
     const groups = {};
     (reg?.keys || []).forEach(k => {
         (groups[k.label] = groups[k.label] || []).push(k);
     });
 
-    // Datalist: merge table labels + registry labels + known set
     const knownLabels = ['PP','NPP','CV','CEC','VEC','VALDEL','ADVENT','ONSHORE','ORDER'];
     const labelOptions = Array.from(new Set([
-        ...Object.keys(avail),
-        ...Object.keys(groups),
-        ...knownLabels,
+        ...Object.keys(avail), ...Object.keys(groups), ...knownLabels,
     ]));
 
     let html = `
     <div class="card" id="kscard_${sid}">
-        <div class="card-title" style="margin:0 0 4px">🔑 Keystore — ${sw}</div>
-        <p style="margin:0 0 4px; font-size:12px; color:#6B7280;">
-            <b>Available</b> values are pulled from the tables above.
-            Every value is editable. Red = exceeds limit.
-        </p>
-        <div id="ksval_${sid}"
-             style="font-size:12px; font-weight:600; margin-bottom:14px;"></div>`;
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:4px;">
+            <div class="card-title" style="margin:0;">🔑 Keystore — ${sw}</div>
+            <div id="ksval_${sid}" style="font-size:12px; font-weight:600;"></div>
+        </div>
+        <p style="margin:0 0 14px; font-size:12px; color:#6B7280;">
+            <b>Available</b> values come from the tables above. Red = exceeds limit.
+        </p>`;
 
     if (!reg || Object.keys(groups).length === 0) {
-        html += `<div class="alert alert-info" style="margin-bottom:12px;">No keys defined yet — add one below.</div>`;
+        html += `<div class="alert alert-info" style="margin-bottom:12px;">No keys defined yet.</div>`;
     } else {
         Object.entries(groups).forEach(([label, keys]) => {
             const key_upper = label.toUpperCase();
@@ -282,14 +608,15 @@ function renderKeystoreForTab(sw) {
             const availTxt  = availVal === undefined
                 ? '<span style="color:#9CA3AF;">— (not in tables)</span>'
                 : `<b>${availVal}</b>`;
-            const single = keys.length === 1;
+            const single    = keys.length === 1;
 
             html += `
             <div class="ks-group"
                  data-sw="${sw}" data-label="${label}"
                  data-avail="${availVal === undefined ? '' : availVal}"
                  style="border:1.5px solid #E5E7EB; border-radius:8px;
-                        padding:12px 14px; margin-bottom:12px; transition:border-color 0.15s, background 0.15s;">
+                        padding:12px 14px; margin-bottom:12px;
+                        transition:border-color 0.15s, background 0.15s;">
                 <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
                     <div style="font-weight:700; color:#1A2B4A;">${label}</div>
                     <div style="font-size:12px; color:#374151;">
@@ -306,19 +633,18 @@ function renderKeystoreForTab(sw) {
                     <tbody>`;
 
             keys.forEach(k => {
-                // pre-fill: saved value → single-key label available → blank
-                let preset = '';
-                if (savedSw[label]?.[k.key_id] !== undefined) {
-                    preset = savedSw[label][k.key_id];
-                } else if (single && availVal !== undefined) {
-                    preset = availVal;
-                }
+                const isActive = k.active;
+                const preset   = !isActive ? 0
+                    : savedSw[label]?.[k.key_id] !== undefined ? savedSw[label][k.key_id]
+                    : single && availVal !== undefined ? availVal
+                    : '';
+
                 html += `
                 <tr>
                     <td style="font-family:monospace; padding:4px 0;">${k.key_id}</td>
                     <td style="text-align:center;">
                         <label class="toggle">
-                            <input type="checkbox" ${k.active ? 'checked' : ''}
+                            <input type="checkbox" ${isActive ? 'checked' : ''}
                                    data-sw="${sw}" data-label="${label}" data-kid="${k.key_id}"
                                    onchange="toggleKeyInline(this)">
                             <span class="toggle-slider"></span>
@@ -331,9 +657,11 @@ function renderKeystoreForTab(sw) {
                                value="${preset}"
                                placeholder="${availVal !== undefined ? availVal : 'value'}"
                                oninput="recomputeKeystore('${sw}')"
-                               style="width:120px; padding:4px 8px;
-                                      border:1.5px solid #2563EB; border-radius:4px;
-                                      background:#EFF6FF; font-size:13px;">
+                               ${!isActive ? 'disabled' : ''}
+                               style="width:120px; padding:4px 8px; border-radius:4px; font-size:13px;
+                                      border:1.5px solid ${isActive ? '#2563EB' : '#D1D5DB'};
+                                      background:${isActive ? '#EFF6FF' : '#F3F4F6'};
+                                      opacity:${isActive ? '1' : '0.5'};">
                     </td>
                 </tr>`;
             });
@@ -342,7 +670,6 @@ function renderKeystoreForTab(sw) {
         });
     }
 
-    // Add-key row + Save button
     html += `
         <div style="display:flex; gap:8px; align-items:flex-end; flex-wrap:wrap;
                     border-top:1px solid #E5E7EB; padding-top:14px; margin-top:4px;">
@@ -359,11 +686,8 @@ function renderKeystoreForTab(sw) {
                 <input id="addKeyId_${sid}" placeholder="e.g. KEY_010"
                        style="width:150px; padding:6px 8px; border:1px solid #D1D5DB; border-radius:4px; font-size:13px;">
             </div>
-            <button class="btn btn-outline btn-sm"
-                    onclick="addKeyInline('${sw}')">➕ Add Key</button>
-            <button class="btn btn-navy btn-sm"
-                    onclick="saveKeystoreValues()"
-                    style="margin-left:auto;">💾 Save Values</button>
+            <button class="btn btn-outline btn-sm" onclick="addKeyInline('${sw}')">➕ Add Key</button>
+            <button class="btn btn-navy btn-sm" onclick="saveKeystoreValues()" style="margin-left:auto;">💾 Save Values</button>
         </div>
     </div>`;
 
@@ -372,9 +696,6 @@ function renderKeystoreForTab(sw) {
 }
 
 // ─── LIVE VALIDATION ──────────────────────────────────────────────────────
-// Returns true = all OK, false = something exceeded.
-// Inline red highlighting happens always; toast only on explicit save/download.
-
 function recomputeKeystore(sw, toastOnFail) {
     const sid      = safeid(sw);
     const order    = getOrder(sw);
@@ -384,21 +705,19 @@ function recomputeKeystore(sw, toastOnFail) {
     document.querySelectorAll(`#kscard_${sid} .ks-group`).forEach(group => {
         const availRaw = group.dataset.avail;
         const avail    = availRaw === '' ? null : Number(availRaw);
-        let sum = 0;
-        group.querySelectorAll('.ks-val').forEach(inp => { sum += Number(inp.value) || 0; });
+        let sum        = 0;
+        group.querySelectorAll('.ks-val').forEach(inp => {
+            const cb = inp.closest('tr')?.querySelector('input[type="checkbox"]');
+            if (!cb || cb.checked) sum += Number(inp.value) || 0;
+        });
         grandTotal += sum;
 
         const over = avail !== null && sum > avail + 1e-9;
         if (over) anyOver = true;
-
         group.style.borderColor = over ? '#DC2626' : '#E5E7EB';
         group.style.background  = over ? '#FFF5F5' : 'transparent';
-
         const sumEl = group.querySelector('.ks-grp-sum');
-        if (sumEl) {
-            sumEl.textContent = `· entered: ${+sum.toFixed(4)}`;
-            sumEl.style.color = over ? '#DC2626' : '#6B7280';
-        }
+        if (sumEl) { sumEl.textContent = `· entered: ${+sum.toFixed(4)}`; sumEl.style.color = over ? '#DC2626' : '#6B7280'; }
     });
 
     const overAll = grandTotal > order + 1e-9;
@@ -406,27 +725,23 @@ function recomputeKeystore(sw, toastOnFail) {
     if (box) {
         if (overAll || anyOver) {
             box.style.color = '#DC2626';
-            box.innerHTML =
-                (overAll ? `⚠️ Grand total ${+grandTotal.toFixed(4)} exceeds Order ${order}. ` : '') +
-                (anyOver && !overAll ? '⚠️ One or more labels exceed their available value.' : '');
+            box.innerHTML   = (overAll ? `⚠️ Total ${+grandTotal.toFixed(4)} exceeds Order ${order}. ` : '') +
+                              (anyOver && !overAll ? '⚠️ Label exceeds available.' : '');
         } else {
             box.style.color = '#059669';
-            box.innerHTML   = `✅ Grand total ${+grandTotal.toFixed(4)} — within Order ${order}.`;
+            box.innerHTML   = `✅ Total ${+grandTotal.toFixed(4)} of Order ${order}`;
         }
     }
 
     const ok = !(overAll || anyOver);
-    if (!ok && toastOnFail) {
-        const msg = overAll
-            ? `${sw}: total entered (${+grandTotal.toFixed(1)}) exceeds Order (${order})`
-            : `${sw}: a label's keys exceed the available value`;
-        toast(`⚠️ ${msg}`, 'error');
-    }
+    if (!ok && toastOnFail) toast(
+        overAll ? `⚠️ ${sw}: total (${+grandTotal.toFixed(1)}) exceeds Order (${order})`
+                : `⚠️ ${sw}: a label exceeds its available value`, 'error'
+    );
     return ok;
 }
 
 // ─── TOGGLE KEY ───────────────────────────────────────────────────────────
-
 async function toggleKeyInline(cb) {
     const sw    = cb.dataset.sw;
     const label = cb.dataset.label;
@@ -443,15 +758,14 @@ async function toggleKeyInline(cb) {
     });
     toast(`${keyId} ${cb.checked ? 'activated ✅' : 'deactivated'}`,
           cb.checked ? 'success' : 'warn');
+    renderKeystoreForTab(sw);
 }
 
 // ─── ADD KEY ──────────────────────────────────────────────────────────────
-
 async function addKeyInline(sw) {
     const sid   = safeid(sw);
     const label = (document.getElementById(`addLabel_${sid}`)?.value || '').trim();
     const keyId = (document.getElementById(`addKeyId_${sid}`)?.value || '').trim();
-
     if (!label || !keyId) { toast('Enter both a label and a key ID', 'warn'); return; }
 
     const params = new URLSearchParams({
@@ -461,27 +775,24 @@ async function addKeyInline(sw) {
     if (!data?.success) { toast(data?.message || 'Could not add key', 'error'); return; }
 
     toast(`Key '${keyId}' added to ${label}`, 'success');
-    saveKeystoreValues(true);           // persist current inputs before re-render
-    await loadKeystore(getSoftware());  // refresh registry from server
-    renderKeystoreForTab(sw);           // re-render keystore section only
+    saveKeystoreValues(true);
+    await loadKeystore(getSoftware());
+    renderKeystoreForTab(sw);
 }
 
 // ─── COLLECT / SAVE KEYSTORE VALUES ──────────────────────────────────────
-
 function collectKeystoreValues() {
     const userValues = {};
     document.querySelectorAll('.ks-val').forEach(inp => {
         if (inp.value === '') return;
         const sw    = inp.dataset.sw;
         const label = inp.dataset.label;
-        // key_id is the third ~~-segment of the id
         const keyId = inp.id.split('~~')[2];
         if (!keyId) return;
         userValues[sw]               = userValues[sw]        || {};
         userValues[sw][label]        = userValues[sw][label] || {};
         userValues[sw][label][keyId] = parseFloat(inp.value) || 0;
     });
-    // merge: keep values from other tabs (not currently in DOM)
     const existing = JSON.parse(sessionStorage.getItem('keystore_values_temp') || '{}');
     const merged   = Object.assign({}, existing, userValues);
     sessionStorage.setItem('keystore_values_temp', JSON.stringify(merged));
@@ -490,57 +801,39 @@ function collectKeystoreValues() {
 
 function saveKeystoreValues(silent) {
     collectKeystoreValues();
-    // validate all visible software
-    const software = getSoftware();
     let allOk = true;
-    software.forEach(sw => {
-        const ok = recomputeKeystore(sw, !silent);  // toast on fail unless silent
-        if (!ok) allOk = false;
-    });
-    if (!silent) {
-        toast(allOk ? 'Values saved ✅' : 'Values saved (with warnings ⚠️ — see red groups)',
-              allOk ? 'success' : 'warn');
-    }
+    getSoftware().forEach(sw => { if (!recomputeKeystore(sw, !silent)) allOk = false; });
+    if (!silent) toast(
+        allOk ? 'Values saved ✅' : 'Values saved (with warnings ⚠️)',
+        allOk ? 'success' : 'warn'
+    );
 }
 
 // ─── DOWNLOAD ALL ─────────────────────────────────────────────────────────
-
 async function downloadAll() {
-    const sid       = getSessionId();
-    const software  = getSoftware();
-    const allInputs = Session.get('inputs') || {};
+    const sid         = getSessionId();
+    const software    = getSoftware();
+    const allInputs   = Session.get('inputs') || {};
     const perSwInputs = {};
     software.forEach(sw => { perSwInputs[sw] = allInputs[sw] || {annual:0, advent:0, onshore:0}; });
 
-    // Validate all open keystores and warn (but don't block) if issues
     let anyFail = false;
     software.forEach(sw => { if (!recomputeKeystore(sw, true)) anyFail = true; });
-    if (anyFail) {
-        // give user a moment to see the toast before the download spinner appears
-        await new Promise(r => setTimeout(r, 600));
-    }
+    if (anyFail) await new Promise(r => setTimeout(r, 600));
 
     const keystoreValues = collectKeystoreValues();
-
     showLoading('Generating Excel report…');
     try {
         const response = await fetch('/download/', {
             method:  'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({
-                session_id:      sid,
-                software:        software,
-                per_sw_inputs:   perSwInputs,
-                keystore_values: keystoreValues,
-            }),
+            body:    JSON.stringify({session_id:sid, software, per_sw_inputs:perSwInputs, keystore_values:keystoreValues}),
         });
-
         if (!response.ok) {
             let msg = 'Download failed';
             try { const err = await response.json(); msg = err.detail || msg; } catch(e){}
             toast(msg, 'error'); hideLoading(); return;
         }
-
         const blob = await response.blob();
         const url  = window.URL.createObjectURL(blob);
         const a    = document.createElement('a');
