@@ -495,3 +495,51 @@ document.querySelectorAll('#developerList input[type="checkbox"]').forEach(chk =
         await loadSoftwareWithInputs();
     });
 });
+
+
+function safeid(s) { return s.replace(/[^a-zA-Z0-9]/g, '_'); }
+
+async function loadDevelopers() {
+    const sid = getSessionId();
+    if (!sid) { window.location.href = '/'; return; }
+
+    const data = await apiFetch(`/tables/developer-list?session_id=${sid}`);
+    if (!data?.success) return;
+
+    const container = document.getElementById('developerList');
+    container.innerHTML = data.data.map(dev => `
+        <div id="devcard_${safeid(dev)}"
+             style="display:inline-flex; align-items:center; gap:8px;
+                    padding:10px 18px; border-radius:8px;
+                    border:1.5px solid #E5E7EB; background:white;
+                    cursor:pointer; font-size:13px; font-weight:600;
+                    transition:all 0.15s;">
+            <input type="checkbox" id="devchk_${safeid(dev)}"
+                   data-dev="${dev}"
+                   style="width:15px; height:15px; accent-color:#2563EB;">
+            👤 ${dev}
+        </div>
+    `).join('');
+
+    // no inline onclick anywhere — only change listener on the checkbox
+    document.querySelectorAll('#developerList input[type="checkbox"]').forEach(chk => {
+        chk.addEventListener('change', async function() {
+            const dev  = this.dataset.dev;
+            const card = document.getElementById(`devcard_${safeid(dev)}`);
+
+            if (this.checked) {
+                if (!selectedDevelopers.includes(dev)) selectedDevelopers.push(dev);
+                card.style.borderColor = '#2563EB';
+                card.style.background  = '#EFF6FF';
+                card.style.color       = '#2563EB';
+            } else {
+                selectedDevelopers      = selectedDevelopers.filter(d => d !== dev);
+                card.style.borderColor = '#E5E7EB';
+                card.style.background  = 'white';
+                card.style.color       = '#111827';
+            }
+
+            await loadSoftwareWithInputs();
+        });
+    });
+}
